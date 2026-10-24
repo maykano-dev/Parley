@@ -28,6 +28,9 @@
 
     <div style="flex:1"></div>
 
+    <button class="icon-btn" id="btn-vault" aria-label="Media vault" title="Vault">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="12" cy="12" r="3"/><path d="M12 7.5V9M12 15v1.5"/></svg>
+    </button>
     <button class="icon-btn" id="btn-about" aria-label="About and limits" title="About and limits">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
     </button>
@@ -61,6 +64,26 @@
     </div>
 
     <div id="chats" class="scroll"></div>
+  </section>
+
+  <section id="vault-view" aria-label="Media vault">
+    <div class="vault-head">
+      <div class="row1">
+        <div style="flex:1">
+          <h1>Vault</h1>
+          <p class="sub" id="vault-sub">Every attachment and link across your conversations</p>
+        </div>
+        <div class="search" style="width:260px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input id="vault-q" type="search" placeholder="Name, sender, chat, caption" autocomplete="off">
+        </div>
+        <button class="icon-btn" id="vault-close" aria-label="Close the vault">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="vault-filters" id="vault-filters"></div>
+    </div>
+    <div class="vault-body scroll" id="vault-body"></div>
   </section>
 
   <section id="thread-col" aria-label="Conversation">

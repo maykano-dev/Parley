@@ -177,6 +177,7 @@ function handle(m) {
     case 'hello':
       S.status = m.status; S.linked = m.linked; S.me = m.me;
       S.chats = m.chats || [];
+      if (m.telegram) { S.tg = Object.assign({}, S.tg, m.telegram); NETWORKS.telegram.live = m.telegram.status === 'online'; }
       if (m.qr) showQR(m.qr);
       if (m.pairingCode) showCode(m.pairingCode);
       paintStatus(); renderChats(); renderMe();
@@ -217,6 +218,21 @@ function handle(m) {
       if (S.active === m.chatId) paintThreadHead();
       break;
     case 'results': S.results = m.results || []; S.view = 'results'; renderChats(); break;
+    case 'tgStatus': {
+      S.tg = Object.assign({}, S.tg, m);
+      NETWORKS.telegram.live = S.tg.status === 'online';
+      renderRail();
+      if (['needPhone', 'needCode', 'needPassword'].includes(m.status) && $('#overlay').classList.contains('on')) openTelegram();
+      if (m.status === 'online') banner('Telegram connected', 'ok', 2500);
+      break;
+    }
+    case 'vault': V.items = m.items || []; V.stats = m.stats; V.loaded = true; renderVault(); break;
+    case 'vaultSaved': {
+      const hit = V.items.find((i) => i.id === m.id);
+      if (hit) { hit.saved = !!m.entry; hit.bytes = m.entry?.bytes || null; }
+      sendWS({ t: 'vault' });
+      break;
+    }
     case 'error': banner(m.message, 'bad', 6000); break;
   }
 }
@@ -283,8 +299,12 @@ function renderRail() {
       }
     }
     b.onclick = () => {
+      if (id === 'telegram') { openTelegram(); return; }
       if (!net.live) { openAbout(); return; }
-      S.view = 'inbox'; renderChats();
+      closeVault();
+      S.view = 'inbox';
+      S.netFilter = S.netFilter === id ? null : id;
+      renderChats();
     };
     host.appendChild(b);
   }
@@ -294,6 +314,7 @@ function renderRail() {
 
 function visibleChats() {
   let list = S.chats.filter((c) => (S.view === 'archived' ? c.archived : !c.archived));
+  if (S.netFilter) list = list.filter((c) => c.network === S.netFilter);
   if (S.filter === 'unread') list = list.filter((c) => (c.unread || 0) > 0);
   if (S.filter === 'groups') list = list.filter((c) => c.isGroup);
   if (S.filter === 'direct') list = list.filter((c) => !c.isGroup);
@@ -958,6 +979,7 @@ function openAbout() {
   });
 }
 $('#btn-about').onclick = openAbout;
+$('#btn-vault').onclick = () => (document.body.classList.contains('in-vault') ? closeVault() : openVault());
 
 // ---------------- linking ----------------
 
@@ -1328,3 +1350,291 @@ document.addEventListener('keydown', (e) => {
     if (last && Date.now() - last.ts < 15 * 60 * 1000) { e.preventDefault(); startEdit(last); }
   }
 });
+
+// ==========================================================
+// Media vault
+// ==========================================================
+
+const V = { items: [], stats: null, filter: 'all', q: '', loaded: false };
+
+const VAULT_ICON = {
+  document: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5"/><path d="M19 21H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h9l6 6v11a1 1 0 0 1-1 1z"/></svg>',
+  audio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 11.2a6.5 6.5 0 0 0 13 0"/><path d="M12 17.8V21"/></svg>',
+  link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>',
+  star: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.6l2.5 5.1 5.6.8-4 4 .9 5.6-5-2.6-5 2.6.9-5.6-4-4 5.6-.8z"/></svg>',
+};
+
+const FILTERS = [
+  ['all', 'All'], ['image', 'Images'], ['video', 'Video'],
+  ['document', 'Documents'], ['audio', 'Audio'], ['link', 'Links'], ['saved', 'Saved'],
+];
+
+function openVault() {
+  document.body.classList.add('in-vault');
+  if (!V.loaded) sendWS({ t: 'vault' });
+  renderVault();
+}
+function closeVault() { document.body.classList.remove('in-vault'); }
+$('#vault-close').onclick = closeVault;
+$('#vault-q').addEventListener('input', (e) => { V.q = e.target.value.trim().toLowerCase(); renderVault(); });
+
+function vaultVisible() {
+  let list = V.items;
+  if (V.filter === 'saved') list = list.filter((i) => i.saved);
+  else if (V.filter !== 'all') list = list.filter((i) => i.kind === V.filter);
+  if (V.q) {
+    list = list.filter((i) =>
+      (i.name || '').toLowerCase().includes(V.q) ||
+      (i.caption || '').toLowerCase().includes(V.q) ||
+      (i.from || '').toLowerCase().includes(V.q) ||
+      (i.chatName || '').toLowerCase().includes(V.q) ||
+      (i.tags || []).some((t) => t.includes(V.q)));
+  }
+  return list;
+}
+
+function renderVault() {
+  const chips = $('#vault-filters');
+  chips.innerHTML = '';
+  for (const [k, label] of FILTERS) {
+    const b = el('button', 'chip');
+    b.setAttribute('aria-pressed', String(V.filter === k));
+    b.appendChild(document.createTextNode(label));
+    const n = V.stats
+      ? (k === 'all' ? V.stats.total : k === 'saved' ? V.stats.saved : (V.stats.by[k] || 0))
+      : null;
+    if (n != null) b.appendChild(el('span', 'n', String(n)));
+    b.onclick = () => { V.filter = k; renderVault(); };
+    chips.appendChild(b);
+  }
+
+  const host = $('#vault-body');
+  host.innerHTML = '';
+
+  if (V.stats) {
+    $('#vault-sub').textContent = V.stats.total
+      ? V.stats.total + ' items indexed across your conversations, nothing copied unless you save it'
+      : 'Nothing indexed yet';
+  }
+
+  if (V.stats && V.stats.saved) {
+    const row = el('div', 'storage');
+    row.innerHTML = VAULT_ICON.star;
+    row.firstChild.style.width = '16px';
+    row.append(
+      el('span', null, V.stats.saved + ' files saved to this device, ' + bytes(V.stats.bytes)),
+    );
+    const sp = el('span'); sp.style.flex = '1'; row.appendChild(sp);
+    const clear = el('button', 'btn danger', 'Remove all saved copies');
+    clear.onclick = () => { sendWS({ t: 'vaultClear' }); setTimeout(() => sendWS({ t: 'vault' }), 400); };
+    row.appendChild(clear);
+    host.appendChild(row);
+  }
+
+  const list = vaultVisible();
+  if (!list.length) {
+    host.appendChild(emptyNote('Nothing here yet',
+      V.items.length
+        ? 'No items match that filter or search.'
+        : 'Attachments and links appear here as conversations sync. A companion device only ever receives a recent window of history.'));
+    return;
+  }
+
+  // Group by month, newest first.
+  let lastGroup = '';
+  let gridHost = null;
+  let listHost = null;
+
+  for (const i of list) {
+    const g = new Date(i.ts).toLocaleDateString([], { month: 'long', year: 'numeric' });
+    if (g !== lastGroup) {
+      host.appendChild(el('div', 'vault-group', g));
+      lastGroup = g;
+      gridHost = null;
+      listHost = null;
+    }
+    const visual = i.kind === 'image' || i.kind === 'video';
+    if (visual) {
+      if (!gridHost) { gridHost = el('div', 'vault-grid'); host.appendChild(gridHost); }
+      gridHost.appendChild(vaultTile(i));
+    } else {
+      if (!listHost) { listHost = el('div', 'vault-list'); host.appendChild(listHost); }
+      listHost.appendChild(vaultRow(i));
+    }
+  }
+}
+
+function vaultTile(i) {
+  const t = el('div', 'tile');
+  const src = (i.saved ? '/vault/' : '/media/') + encodeURIComponent(i.id);
+  if (i.kind === 'image') {
+    const img = el('img');
+    img.src = src; img.alt = i.name; img.loading = 'lazy';
+    img.onerror = () => { t.style.background = 'var(--well)'; img.remove(); };
+    t.appendChild(img);
+  } else {
+    const v = document.createElement('video');
+    v.src = src; v.preload = 'metadata'; v.muted = true;
+    t.appendChild(v);
+    const play = el('div', 'play');
+    play.innerHTML = '<span><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>';
+    t.appendChild(play);
+  }
+  const meta = el('div', 'meta');
+  meta.textContent = i.from + ' · ' + listTime(i.ts);
+  t.appendChild(meta);
+  t.appendChild(starBtn(i));
+  t.onclick = () => { if (i.kind === 'image') openLightbox(src, i.name); else window.open(src, '_blank'); };
+  return t;
+}
+
+function vaultRow(i) {
+  const r = el('button', 'vault-row');
+  const ico = el('div', 'ico');
+  ico.innerHTML = VAULT_ICON[i.kind] || VAULT_ICON.document;
+  const cell = el('div', 'cell');
+  const nm = el('div', 'nm');
+  nm.textContent = i.name;
+  for (const tag of i.tags || []) nm.appendChild(el('span', 'tag alt', tag));
+  if (i.saved) nm.appendChild(el('span', 'tag', 'saved'));
+  cell.appendChild(nm);
+  cell.appendChild(el('div', 'sub', i.from + ' in ' + i.chatName + (i.caption ? ' · ' + i.caption : '')));
+  r.append(ico, cell, el('span', 'when', listTime(i.ts)));
+  if (i.kind !== 'link') r.appendChild(starBtn(i, true));
+  r.onclick = (e) => {
+    if (e.target.closest('.star')) return;
+    if (i.kind === 'link') window.open(i.url, '_blank', 'noopener');
+    else if (i.kind === 'audio') window.open((i.saved ? '/vault/' : '/media/') + encodeURIComponent(i.id), '_blank');
+    else {
+      const a = document.createElement('a');
+      a.href = (i.saved ? '/vault/' : '/media/') + encodeURIComponent(i.id) + '?dl=1';
+      a.download = i.name; a.click();
+    }
+  };
+  return r;
+}
+
+function starBtn(i, plain) {
+  const b = el('button', 'star' + (i.saved ? ' on' : ''));
+  if (plain) b.style.cssText = 'position:static;opacity:1;background:transparent;color:' + (i.saved ? 'var(--accent)' : 'var(--ink-3)');
+  b.setAttribute('aria-label', i.saved ? 'Remove the saved copy' : 'Save a copy to this device');
+  b.title = b.getAttribute('aria-label');
+  b.innerHTML = VAULT_ICON.star;
+  b.onclick = (e) => {
+    e.stopPropagation();
+    sendWS({ t: i.saved ? 'vaultRemove' : 'vaultSave', id: i.id });
+    banner(i.saved ? 'Removing the saved copy' : 'Saving a copy to this device', '', 1600);
+  };
+  return b;
+}
+
+function bytes(n) {
+  if (!n) return '0 B';
+  const u = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (i ? n.toFixed(1) : n) + ' ' + u[i];
+}
+
+// ==========================================================
+// Telegram: connect flow
+// ==========================================================
+
+S.tg = { status: 'offline', linked: false, configured: false, hint: null, me: null };
+
+function tgLive() { return S.tg.status === 'online'; }
+
+function openTelegram() {
+  const st = S.tg;
+
+  if (!st.configured) {
+    openSheet('Connect Telegram', (host) => {
+      const p = el('p', null, 'Telegram needs an api_id and api_hash, issued per application. Create one at my.telegram.org under API development tools, then save the pair into data/telegram.json and restart Parley.');
+      p.style.cssText = 'margin:0 0 16px;color:var(--ink-2);line-height:1.6';
+      host.appendChild(p);
+      const pre = el('pre', null, '{\n  "apiId": 0,\n  "apiHash": ""\n}');
+      pre.style.cssText = 'margin:0;padding:14px;border-radius:12px;background:var(--well);border:1px solid var(--sep);font-family:var(--mono);font-size:12.5px;overflow:auto';
+      host.appendChild(pre);
+      const note = el('div', 'note');
+      note.style.marginTop = '16px';
+      note.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v5M12 17.5h.01"/><path d="M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><span>Keep the api_hash private. It lives in data/, which is excluded from git, and must never be committed to a public repository.</span>';
+      host.appendChild(note);
+    });
+    return;
+  }
+
+  if (tgLive()) {
+    openSheet('Telegram', (host) => {
+      const top = el('div', 'profile-top');
+      const av = el('div');
+      avatar(av, st.me?.name || 'Telegram', st.me?.id || 'tg', 72, 'telegram');
+      top.append(av, el('div', 'nm', st.me?.name || 'Connected'), el('div', 'sub', 'Telegram, connected through TDLib'));
+      host.appendChild(top);
+
+      const card = card_(host, 'This connection');
+      kv(card, 'Status', 'Online');
+      kv(card, 'Library', "TDLib, Telegram's own");
+      kv(card, 'Ban risk', 'None, third party clients are supported');
+
+      const out = el('button', 'btn danger', 'Disconnect Telegram');
+      out.style.marginTop = '14px';
+      out.onclick = () => { sendWS({ t: 'tgLogout' }); $('#overlay').classList.remove('on'); banner('Disconnecting Telegram', '', 2500); };
+      card.appendChild(out);
+    });
+    return;
+  }
+
+  openSheet('Connect Telegram', (host) => {
+    const step = st.status;
+    const intro = el('p', null, st.hint || 'Telegram officially supports third party clients, so this connection carries no account risk.');
+    intro.style.cssText = 'margin:0 0 18px;color:var(--ink-2);line-height:1.6';
+    host.appendChild(intro);
+
+    const box = card_(host, step === 'needCode' ? 'Login code' : step === 'needPassword' ? 'Two step password' : 'Phone number');
+    const input = el('input');
+    input.className = 'tg-input';
+    input.style.cssText = 'width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--well);color:var(--ink);font-size:15px;outline:none';
+    if (step === 'needCode') { input.inputMode = 'numeric'; input.placeholder = '12345'; input.autocomplete = 'one-time-code'; }
+    else if (step === 'needPassword') { input.type = 'password'; input.placeholder = 'Your password'; }
+    else { input.inputMode = 'tel'; input.placeholder = '+233241234567'; input.autocomplete = 'tel'; }
+    box.appendChild(input);
+
+    const go = el('button', 'btn primary', step === 'needCode' ? 'Verify' : step === 'needPassword' ? 'Unlock' : 'Send code');
+    go.style.cssText = 'margin-top:14px;width:100%;justify-content:center;display:flex';
+    const submit = () => {
+      const v = input.value.trim();
+      if (!v) return;
+      go.textContent = 'Working';
+      if (step === 'needCode') sendWS({ t: 'tgCode', code: v });
+      else if (step === 'needPassword') sendWS({ t: 'tgPassword', password: v });
+      else sendWS({ t: 'tgPhone', phone: v });
+    };
+    go.onclick = submit;
+    input.onkeydown = (e) => { if (e.key === 'Enter') submit(); };
+    box.appendChild(go);
+
+    if (step === 'offline' || step === 'connecting') {
+      const start = el('button', 'btn', 'Start the connection');
+      start.style.cssText = 'margin-top:10px;width:100%;justify-content:center;display:flex';
+      start.onclick = () => { sendWS({ t: 'tgStart' }); start.textContent = 'Starting'; };
+      box.appendChild(start);
+    }
+
+    setTimeout(() => input.focus(), 120);
+  });
+}
+
+function card_(host, label) {
+  const c = el('div', 'card');
+  if (label) c.appendChild(el('span', 'label', label));
+  host.appendChild(c);
+  return c;
+}
+function kv(host, k, v) {
+  const row = el('div', 'kv');
+  const left = el('div');
+  left.appendChild(el('div', 'k', k));
+  row.append(left, el('div', 'v', v));
+  host.appendChild(row);
+  return row;
+}

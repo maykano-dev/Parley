@@ -416,6 +416,13 @@ export class WhatsApp extends EventEmitter {
 
   rememberRaw(m) {
     this.raw.set(m.key.id, m);
+    try {
+      const inner = unwrap(m.message);
+      const t = inner ? getContentType(inner) : null;
+      if (t && kindOf(t) !== 'text' && kindOf(t) !== 'skip') {
+        this.store.rememberMedia(m.key.id, JSON.parse(JSON.stringify(m)));
+      }
+    } catch { /* a handle we cannot serialise is simply not persisted */ }
     if (this.raw.size > 2000) {
       const oldest = this.raw.keys().next().value;
       this.raw.delete(oldest);
@@ -580,8 +587,8 @@ export class WhatsApp extends EventEmitter {
   }
 
   async media(id) {
-    const m = this.raw.get(id);
-    if (!m) throw new Error('That attachment is no longer cached. Reopen the conversation.');
+    const m = this.raw.get(id) || this.store.mediaHandle(id);
+    if (!m) throw new Error('That attachment is no longer available on this device.');
     const buffer = await downloadMediaMessage(
       m,
       'buffer',

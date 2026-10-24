@@ -10,6 +10,8 @@ import { WebSocketServer } from 'ws';
 import QRCode from 'qrcode';
 import { Store } from './store.js';
 import { WhatsApp, CAPABILITIES } from './wa.js';
+import { Vault } from './vault.js';
+import { Telegram, CAPABILITIES as TG_CAPS, hasCredentials as tgReady } from './tg.js';
 
 const PORT = Number(process.env.PORT || 5173);
 const HOST = '127.0.0.1';
@@ -17,6 +19,11 @@ const WEB = path.resolve('web');
 
 const store = new Store();
 const wa = new WhatsApp(store);
+const vault = new Vault(store);
+const tg = new Telegram(store);
+
+// One router, so nothing downstream has to know which network a chat is on.
+const adapterFor = (id) => (String(id).startsWith('tg:') ? tg : wa);
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -33,6 +40,7 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname.startsWith('/media/')) return serveMedia(url, res);
   if (url.pathname === '/upload' && req.method === 'POST') return receiveUpload(req, url, res);
+  if (url.pathname.startsWith('/vault/')) return serveSaved(url, res);
 
   let rel = url.pathname === '/' ? '/index.html' : url.pathname;
   const file = path.join(WEB, path.normalize(rel).replace(/^(\.\.[/\\])+/, ''));
@@ -56,7 +64,7 @@ const server = http.createServer(async (req, res) => {
 async function serveMedia(url, res) {
   const id = decodeURIComponent(url.pathname.slice('/media/'.length));
   try {
-    const { buffer, mime, fileName } = await wa.media(id);
+    const { buffer, mime, fileName } = await adapterFor(id).media(id);
     const headers = { 'content-type': mime, 'content-length': buffer.length, 'cache-control': 'private, max-age=600' };
     if (fileName && url.searchParams.get('dl')) {
       headers['content-disposition'] = 'attachment; filename="' + fileName.replace(/"/g, '') + '"';
@@ -86,6 +94,7 @@ function receiveUpload(req, url, res) {
     try {
       const chatId = url.searchParams.get('chatId');
       if (!chatId) throw new Error('Missing conversation.');
+      if (String(chatId).startsWith('tg:')) throw new Error('Sending attachments on Telegram is not wired yet.');
       await wa.sendMedia(chatId, Buffer.concat(chunks), {
         mime: req.headers['x-file-type'] || '',
         fileName: decodeURIComponent(req.headers['x-file-name'] || 'file'),
@@ -97,6 +106,21 @@ function receiveUpload(req, url, res) {
       res.writeHead(400, { 'content-type': 'text/plain' }).end(e.message);
     }
   });
+}
+
+function serveSaved(url, res) {
+  const id = decodeURIComponent(url.pathname.slice('/vault/'.length));
+  const hit = vault.localPath(id);
+  if (!hit) {
+    res.writeHead(404, { 'content-type': 'text/plain' }).end('Not in the vault');
+    return;
+  }
+  const headers = { 'content-type': hit.mime || 'application/octet-stream', 'cache-control': 'private, max-age=3600' };
+  if (url.searchParams.get('dl')) {
+    headers['content-disposition'] = 'attachment; filename="' + String(hit.name).replace(/"/g, '') + '"';
+  }
+  res.writeHead(200, headers);
+  fs.createReadStream(hit.path).pipe(res);
 }
 
 // ---- websocket bridge -------------------------------------------
@@ -115,10 +139,11 @@ async function sendHello(ws) {
   const qrPng = wa.qr ? await QRCode.toDataURL(wa.qr, qrOpts) : null;
   ws.send(JSON.stringify({
     t: 'hello',
-    capabilities: [CAPABILITIES],
+    capabilities: [CAPABILITIES, TG_CAPS],
     status: wa.status,
     linked: wa.isLinked(),
     me: wa.me || store.data.me,
+    telegram: { status: tg.status, linked: tg.isLinked(), configured: tgReady(), me: tg.me, hint: tg.hint },
     qr: qrPng,
     pairingCode: wa.pairingCode,
     chats: store.chatList(),
@@ -138,15 +163,38 @@ wss.on('connection', (ws) => {
       switch (msg.t) {
         case 'open': {
           ws.send(JSON.stringify({ t: 'messages', chatId: msg.chatId, messages: store.messages(msg.chatId) }));
-          await wa.markRead(msg.chatId);
-          if (store.messages(msg.chatId).length < 20) wa.loadMore(msg.chatId).catch(() => {});
+          const ad = adapterFor(msg.chatId);
+          await ad.markRead(msg.chatId);
+          if (store.messages(msg.chatId).length < 20) {
+            if (ad === tg) {
+              await tg.history(msg.chatId, 40);
+              ws.send(JSON.stringify({ t: 'messages', chatId: msg.chatId, messages: store.messages(msg.chatId) }));
+            } else {
+              wa.loadMore(msg.chatId).catch(() => {});
+            }
+          }
           break;
         }
         case 'loadMore':
           await wa.loadMore(msg.chatId, 50);
           break;
         case 'send':
-          await wa.send(msg.chatId, msg.text, msg.replyTo || null);
+          await adapterFor(msg.chatId).send(msg.chatId, msg.text, msg.replyTo || null);
+          break;
+        case 'tgStart':
+          await tg.start();
+          break;
+        case 'tgPhone':
+          await tg.submitPhone(msg.phone);
+          break;
+        case 'tgCode':
+          await tg.submitCode(msg.code);
+          break;
+        case 'tgPassword':
+          await tg.submitPassword(msg.password);
+          break;
+        case 'tgLogout':
+          await tg.logout();
           break;
         case 'react':
           await wa.react(msg.chatId, msg.id, msg.emoji);
@@ -184,6 +232,26 @@ wss.on('connection', (ws) => {
         case 'pair': {
           const code = await wa.requestPairing(msg.phone);
           if (code) ws.send(JSON.stringify({ t: 'pairing', code, phone: msg.phone }));
+          break;
+        }
+        case 'vault': {
+          const index = vault.index();
+          ws.send(JSON.stringify({ t: 'vault', items: index, stats: vault.stats(index) }));
+          break;
+        }
+        case 'vaultSave': {
+          const entry = await vault.save(msg.id, (id) => wa.media(id));
+          ws.send(JSON.stringify({ t: 'vaultSaved', id: msg.id, entry }));
+          break;
+        }
+        case 'vaultRemove': {
+          vault.remove(msg.id);
+          ws.send(JSON.stringify({ t: 'vaultSaved', id: msg.id, entry: null }));
+          break;
+        }
+        case 'vaultClear': {
+          const n = vault.clear();
+          ws.send(JSON.stringify({ t: 'error', message: 'Removed ' + n + ' saved files from the vault.' }));
           break;
         }
         case 'search':
@@ -239,6 +307,13 @@ wa.on('presence', (p) => broadcast('presence', p));
 wa.on('pairing', ({ code, phone }) => broadcast('pairing', { code, phone }));
 wa.on('loggedOut', () => broadcast('error', { message: 'WhatsApp unlinked this device. Link it again to continue.' }));
 wa.on('error', (message) => broadcast('error', { message }));
+tg.on('status', (s) => broadcast('tgStatus', s));
+tg.on('chats', (chats) => broadcast('chats', { chats }));
+tg.on('chat', (chat) => broadcast('chat', { chat }));
+tg.on('message', (message) => broadcast('message', { message }));
+tg.on('presence', (p) => broadcast('presence', p));
+tg.on('error', (message) => broadcast('error', { message }));
+
 wa.on('qr', async (qr) => {
   try {
     broadcast('qr', { qr: await QRCode.toDataURL(qr, qrOpts) });
@@ -256,12 +331,14 @@ server.listen(PORT, HOST, () => {
 });
 
 wa.start().catch((e) => console.error('[wa] start failed:', e.message));
+if (tgReady() && tg.isLinked()) tg.start().catch((e) => console.error('[tg] start failed:', e.message));
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, async () => {
     console.log('\n  shutting down');
     store.flush();
     await wa.stop();
+    await tg.stop();
     process.exit(0);
   });
 }

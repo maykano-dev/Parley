@@ -7,8 +7,9 @@ import path from 'node:path';
 const DIR = path.resolve('data');
 const FILE = path.join(DIR, 'store.json');
 const MAX_PER_CHAT = 400;
+const MAX_MEDIA = 900;
 
-const empty = () => ({ chats: {}, messages: {}, contacts: {}, me: null });
+const empty = () => ({ chats: {}, messages: {}, contacts: {}, media: {}, me: null });
 
 export class Store {
   constructor() {
@@ -83,6 +84,27 @@ export class Store {
     return Object.values(this.data.chats)
       .filter((c) => !c.hidden)
       .sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
+  }
+
+  // ---- media handles --------------------------------------------
+  // Decryption needs the original message. Holding it only in memory meant a
+  // restart orphaned every attachment, so the reference mode of the vault
+  // would break on relaunch. Persist a bounded set instead.
+
+  rememberMedia(id, raw) {
+    const m = (this.data.media ||= {});
+    if (m[id]) return;
+    m[id] = { at: Date.now(), raw };
+    const ids = Object.keys(m);
+    if (ids.length > MAX_MEDIA) {
+      ids.sort((a, b) => (m[a].at || 0) - (m[b].at || 0));
+      for (const old of ids.slice(0, ids.length - MAX_MEDIA)) delete m[old];
+    }
+    this.touch();
+  }
+
+  mediaHandle(id) {
+    return this.data.media?.[id]?.raw || null;
   }
 
   // ---- messages -------------------------------------------------
