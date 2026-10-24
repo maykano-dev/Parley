@@ -518,6 +518,13 @@ function renderChats() {
 
     const cell = el('div', 'cell');
     const top = el('div', 'top');
+    if (c.pinned) {
+      const pin = el('span');
+      pin.style.cssText = 'flex:none;display:inline-flex;color:var(--ink-3)';
+      pin.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" style="width:11px;height:11px"><path d="M14 2l8 8-3 1-3 3-1 5-3-3-5 5-1-1 5-5-3-3 5-1 3-3z"/></svg>';
+      pin.title = 'Pinned';
+      top.appendChild(pin);
+    }
     top.appendChild(el('span', 'name', c.name));
     if (c.muted) {
       const m = el('span');

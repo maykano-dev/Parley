@@ -221,7 +221,7 @@ wss.on('connection', (ws) => {
           await wa.forward(msg.toChatId, msg.id);
           break;
         case 'modify':
-          await wa.modify(msg.chatId, msg.what || {});
+          await adapterFor(msg.chatId).modify(msg.chatId, msg.what || {});
           break;
         case 'sendAudio': {
           const bytes = Buffer.from(msg.data || '', 'base64');

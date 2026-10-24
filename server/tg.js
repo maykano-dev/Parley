@@ -362,18 +362,70 @@ export class Telegram extends EventEmitter {
     if (patched) this.emit('message', patched);
   }
 
-  async history(chatId, limit = 40) {
+  async history(chatId, limit = 50) {
+    const tgId = Number(String(chatId).replace('tg:', ''));
+    let got = 0;
+    let from = 0;
+
+    // TDLib returns locally cached messages and starts a download in the
+    // background. The first call is routinely empty, so keep asking.
+    for (let attempt = 0; attempt < 4 && got < limit; attempt++) {
+      let res;
+      try {
+        res = await this.client.invoke({
+          _: 'getChatHistory', chat_id: tgId, from_message_id: from, offset: 0, limit, only_local: false,
+        });
+      } catch (e) {
+        this.emit('error', 'Telegram history: ' + e.message);
+        break;
+      }
+      const batch = res?.messages || [];
+      if (!batch.length) {
+        await new Promise((r) => setTimeout(r, 450));   // let the fetch land
+        continue;
+      }
+      for (const m of [...batch].reverse()) this.ingestMessage(m, false);
+      got += batch.length;
+      from = batch[batch.length - 1].id;                // page backwards
+      if (batch.length < limit) break;
+    }
+    return got;
+  }
+
+  // Pin, mute and archive, so the same actions work on both networks.
+  async modify(chatId, what) {
+    if (this.status !== 'online') throw new Error('Telegram is not connected.');
     const tgId = Number(String(chatId).replace('tg:', ''));
     try {
-      const res = await this.client.invoke({
-        _: 'getChatHistory', chat_id: tgId, from_message_id: 0, offset: 0, limit, only_local: false,
-      });
-      for (const m of (res.messages || []).reverse()) this.ingestMessage(m, false);
-      return (res.messages || []).length;
+      if ('pin' in what) {
+        await this.client.invoke({
+          _: 'toggleChatIsPinned', chat_list: { _: 'chatListMain' }, chat_id: tgId, is_pinned: !!what.pin,
+        });
+      }
+      if ('archive' in what) {
+        await this.client.invoke({
+          _: 'addChatToList', chat_id: tgId,
+          chat_list: { _: what.archive ? 'chatListArchive' : 'chatListMain' },
+        });
+      }
+      if ('mute' in what) {
+        await this.client.invoke({
+          _: 'setChatNotificationSettings', chat_id: tgId,
+          notification_settings: { _: 'chatNotificationSettings', use_default_mute_for: false, mute_for: what.mute ? 8 * 3600 : 0 },
+        });
+      }
+      if ('unread' in what) {
+        await this.client.invoke({ _: 'toggleChatIsMarkedAsUnread', chat_id: tgId, is_marked_as_unread: !!what.unread });
+      }
     } catch (e) {
-      this.emit('error', 'Telegram history: ' + e.message);
-      return 0;
+      throw new Error('Telegram refused that change: ' + e.message);
     }
+    const next = { id: chatId };
+    if ('pin' in what) next.pinned = !!what.pin;
+    if ('archive' in what) next.archived = !!what.archive;
+    if ('mute' in what) next.muted = !!what.mute;
+    if ('unread' in what) next.unread = what.unread ? 1 : 0;
+    this.emit('chat', this.store.upsertChat(next));
   }
 
   // ---- profile --------------------------------------------------

@@ -83,7 +83,13 @@ export class Store {
   chatList() {
     return Object.values(this.data.chats)
       .filter((c) => !c.hidden)
-      .sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
+      .sort((a, b) => {
+        // Pinned chats sit above everything, then recency inside each band.
+        const ap = a.pinned ? 1 : 0;
+        const bp = b.pinned ? 1 : 0;
+        if (ap !== bp) return bp - ap;
+        return (b.lastTs || 0) - (a.lastTs || 0);
+      });
   }
 
   // ---- media handles --------------------------------------------
