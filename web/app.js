@@ -357,11 +357,15 @@ function renderChats() {
       m.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:11px;height:11px;color:var(--ink-3)"><path d="M11 5 6.5 9H3v6h3.5L11 19z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>';
       top.appendChild(m);
     }
-    top.appendChild(el('span', 'time', listTime(c.lastTs)));
+    if (c.lastTs) top.appendChild(el('span', 'time', listTime(c.lastTs)));
     cell.appendChild(top);
 
     const bot = el('div', 'bot');
-    const prev = el('span', 'prev', (c.lastFromMe ? 'You: ' : '') + (c.lastText || ''));
+    const preview = c.lastText
+      ? (c.lastFromMe ? 'You: ' : '') + c.lastText
+      : (c.unread ? c.unread + ' unread, not synced to this device yet' : 'No messages on this device yet');
+    const prev = el('span', 'prev', preview);
+    if (!c.lastText) prev.style.fontStyle = 'italic';
     bot.appendChild(prev);
     if (c.unread) bot.appendChild(el('span', 'count', c.unread > 99 ? '99+' : String(c.unread)));
     cell.appendChild(bot);
@@ -433,6 +437,28 @@ function renderThread() {
   const nearBottom = host.scrollHeight - host.scrollTop - host.clientHeight < 140;
   host.innerHTML = '';
   const list = S.messages.get(S.active) || [];
+
+  if (!list.length) {
+    const wrap = el('div', 'center');
+    const inner = el('div', 'inner');
+    const g = el('div', 'glyph');
+    g.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/></svg>';
+    const h = el('h2', null, 'Nothing on this device yet');
+    const p = el('p', null, 'WhatsApp hands a companion device a window of recent history when it is first linked, and this one was linked before that was switched on. New messages will arrive here from now on. To pull in past conversations, unlink and link again from the About panel.');
+    const btn = el('button', 'btn primary', 'Try loading older messages');
+    btn.style.marginTop = '18px';
+    btn.onclick = () => { sendWS({ t: 'loadMore', chatId: S.active }); banner('Asked your phone for older messages', '', 3000); };
+    inner.append(g, h, p, btn);
+    wrap.appendChild(inner);
+    host.appendChild(wrap);
+    return;
+  }
+
+  // Scrollback control, once there is something to anchor on.
+  const more = el('button', 'btn', 'Load older messages');
+  more.style.cssText = 'align-self:center;margin-bottom:6px';
+  more.onclick = () => { sendWS({ t: 'loadMore', chatId: S.active }); more.textContent = 'Asking your phone'; };
+  host.appendChild(more);
 
   let lastDay = '';
   for (const m of list) {

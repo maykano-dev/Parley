@@ -106,8 +106,12 @@ wss.on('connection', (ws) => {
         case 'open': {
           ws.send(JSON.stringify({ t: 'messages', chatId: msg.chatId, messages: store.messages(msg.chatId) }));
           await wa.markRead(msg.chatId);
+          if (store.messages(msg.chatId).length < 20) wa.loadMore(msg.chatId).catch(() => {});
           break;
         }
+        case 'loadMore':
+          await wa.loadMore(msg.chatId, 50);
+          break;
         case 'send':
           await wa.send(msg.chatId, msg.text);
           break;

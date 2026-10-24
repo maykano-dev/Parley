@@ -21,6 +21,8 @@ import {
   DisconnectReason,
   getContentType,
   jidNormalizedUser,
+  isLidUser,
+  isJidGroup,
   Browsers,
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
@@ -96,7 +98,8 @@ export class WhatsApp extends EventEmitter {
       },
       browser: Browsers.ubuntu('Desktop'),
       printQRInTerminal: false,
-      syncFullHistory: false,        // companions only ever get a recent window
+      syncFullHistory: true,         // take the window WhatsApp offers at link time
+      shouldSyncHistoryMessage: () => true,
       markOnlineOnConnect: false,    // leave phone notifications working
       generateHighQualityLinkPreview: false,
       emitOwnEvents: true,
@@ -247,11 +250,32 @@ export class WhatsApp extends EventEmitter {
 
   // ---- normalisation -------------------------------------------
 
+  // Baileys keeps a LID to phone-number map once it has seen both. Use it when
+  // it is there, and degrade quietly when it is not.
+  phoneFor(jid) {
+    try {
+      const m = this.sock?.signalRepository?.lidMapping;
+      return m?.getPNForLID?.(jid) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  nameFor(jid) {
+    const direct = this.store.contactName(jid);
+    if (direct) return direct;
+    if (isLidUser(String(jid))) {
+      const pn = this.phoneFor(jid);
+      if (pn) return this.store.contactName(pn) || prettyJid(pn);
+    }
+    return prettyJid(jid);
+  }
+
   ingestChat(c) {
     const id = c.id;
     if (!id || id === 'status@broadcast') return;
     const isGroup = id.endsWith('@g.us');
-    const name = c.name || c.subject || this.store.contactName(id) || prettyJid(id);
+    const name = c.name || c.subject || this.nameFor(id);
     const chat = {
       id,
       network: 'whatsapp',
@@ -303,7 +327,7 @@ export class WhatsApp extends EventEmitter {
       chatId,
       network: 'whatsapp',
       fromMe,
-      author: fromMe ? 'You' : (this.store.contactName(authorJid) || m.pushName || prettyJid(authorJid)),
+      author: fromMe ? 'You' : (this.store.contactName(authorJid) || m.pushName || this.nameFor(authorJid)),
       showAuthor: isGroup && !fromMe,
       text,
       kind,
@@ -316,7 +340,7 @@ export class WhatsApp extends EventEmitter {
       hasMedia: kind !== 'text',
       quoted: quotedBody
         ? {
-            author: ctx.participant ? (this.store.contactName(jidNormalizedUser(ctx.participant)) || prettyJid(ctx.participant)) : '',
+            author: ctx.participant ? this.nameFor(jidNormalizedUser(ctx.participant)) : '',
             text: quotedBody.conversation || quotedBody.extendedTextMessage?.text || captionOf(quotedBody) || 'Attachment',
           }
         : null,
@@ -332,7 +356,7 @@ export class WhatsApp extends EventEmitter {
       id: chatId,
       network: 'whatsapp',
       isGroup,
-      name: existing.name || this.store.contactName(chatId) || (isGroup ? prettyJid(chatId) : (m.pushName || prettyJid(chatId))),
+      name: existing.name || this.store.contactName(chatId) || (isGroup ? prettyJid(chatId) : (m.pushName || this.nameFor(chatId))),
       lastTs: Math.max(existing.lastTs || 0, msg.ts),
       lastText: previewOf(msg),
       lastFromMe: fromMe,
@@ -375,6 +399,24 @@ export class WhatsApp extends EventEmitter {
     });
     if (res) this.ingestMessage(res, { notify: false });
     return res?.key?.id || null;
+  }
+
+  async loadMore(chatId, count = 50) {
+    if (!this.sock || this.status !== 'online') return 0;
+    const have = this.store.messages(chatId);
+    if (!have.length) return 0;                 // nothing to anchor the request to
+    const oldest = have[0];
+    try {
+      await this.sock.fetchMessageHistory(
+        count,
+        { remoteJid: chatId, id: oldest.id, fromMe: !!oldest.fromMe },
+        Math.floor(oldest.ts / 1000),
+      );
+      return 1;
+    } catch (e) {
+      this.emit('error', 'Could not load older messages: ' + e.message);
+      return 0;
+    }
   }
 
   async markRead(chatId) {
@@ -478,7 +520,11 @@ function toMs(ts) {
 
 function prettyJid(jid) {
   if (!jid) return 'Unknown';
-  const user = String(jid).split('@')[0];
-  if (String(jid).endsWith('@g.us')) return 'Group ' + user.slice(-4);
+  const s = String(jid);
+  const user = s.split('@')[0];
+  if (isJidGroup(s)) return 'Group ' + user.slice(-4);
+  // A LID is an opaque identity, not a dialable number. Showing it with a
+  // plus sign in front invents a phone number that is not real.
+  if (isLidUser(s)) return 'WhatsApp user';
   return '+' + user;
 }
