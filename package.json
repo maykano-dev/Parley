@@ -1,0 +1,62 @@
+{
+  "name": "parley",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "One inbox for every messaging network. Your accounts stay yours.",
+  "scripts": {
+    "start": "electron .",
+    "serve": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "dist": "electron-builder",
+    "dist:linux": "electron-builder --linux AppImage deb"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.24",
+    "pino": "^10.4.0",
+    "qrcode": "^1.5.4",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^26.18.0"
+  },
+  "productName": "Parley",
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "dev.maykano.parley",
+    "productName": "Parley",
+    "files": [
+      "electron/**",
+      "server/**",
+      "web/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network;InstantMessaging",
+      "maintainer": "maykano"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.social-networking"
+    }
+  }
+}

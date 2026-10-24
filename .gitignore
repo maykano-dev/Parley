@@ -1,0 +1,6 @@
+node_modules/
+data/
+*.log
+_archive-old-site/
+dist/
+build/*.png
