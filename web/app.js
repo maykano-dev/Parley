@@ -404,9 +404,10 @@ function renderRail() {
   host.innerHTML = '';
 
   const all = el('button', 'rail-btn');
-  all.setAttribute('aria-pressed', 'true');
+  all.setAttribute('aria-pressed', String(!S.netFilter));
   all.setAttribute('aria-label', 'All networks');
   all.title = 'All networks';
+  all.onclick = () => { showView(null); S.netFilter = null; S.view = 'inbox'; renderChats(); };
   const allMark = el('span', 'mark');
   allMark.style.background = 'var(--accent)';
   allMark.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13.5h4.2l1.6 2.6h6.4l1.6-2.6H21"/><path d="M5.6 5h12.8l2.6 8.5v4A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-4z"/></svg>';
@@ -429,15 +430,25 @@ function renderRail() {
         b.appendChild(bd);
       }
     }
+    const manage = () => (id === 'telegram' ? openTelegram() : id === 'whatsapp' ? openAbout() : showAccounts());
+
+    b.setAttribute('aria-pressed', String(S.netFilter === id));
     b.onclick = () => {
-      if (id === 'telegram') { openTelegram(); return; }
-      if (id === 'whatsapp' && !net.live) { showLink(); return; }
-      if (!net.live) { showAccounts(); return; }
-      closeVault();
+      if (!net.live) {
+        if (id === 'telegram') openTelegram();
+        else if (id === 'whatsapp') showLink();
+        else showAccounts();
+        return;
+      }
+      showView(null);
       S.view = 'inbox';
       S.netFilter = S.netFilter === id ? null : id;
       renderChats();
     };
+    b.oncontextmenu = (e) => { e.preventDefault(); manage(); };
+    b.title = net.live
+      ? net.label + (S.netFilter === id ? ', showing only these. Click to show all' : ', click to show only these') + '. Right click to manage.'
+      : net.label + ', not connected';
     host.appendChild(b);
   }
 }
@@ -457,7 +468,10 @@ function renderChats() {
   renderRail();
   const host = $('#chats');
   host.innerHTML = '';
-  $('#list-title').textContent = S.view === 'archived' ? 'Archived' : S.view === 'results' ? 'Search' : 'All messages';
+  $('#list-title').textContent = S.view === 'archived' ? 'Archived'
+    : S.view === 'results' ? 'Search'
+    : S.netFilter ? (NETWORKS[S.netFilter]?.label || 'Messages')
+    : 'All messages';
 
   if (S.view === 'results') {
     if (!S.results.length) {

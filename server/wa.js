@@ -132,6 +132,7 @@ export class WhatsApp extends EventEmitter {
 
       if (connection === 'open') {
         this.retry = 0;
+        this.hydrate().catch(() => { /* names are best effort */ });
         this.qr = null;
         this.pairingCode = null;
         this.me = sock.user
@@ -166,19 +167,34 @@ export class WhatsApp extends EventEmitter {
 
     // ---- history sync: the bounded window a companion is given ----
     sock.ev.on('messaging-history.set', ({ chats = [], contacts = [], messages = [] }) => {
-      for (const c of contacts) {
-        this.store.setContact(jidNormalizedUser(c.id), c.name || c.notify || c.verifiedName);
-      }
+      takeContacts(contacts);
       for (const c of chats) this.ingestChat(c);
       for (const m of messages) this.ingestMessage(m, { silent: true });
       this.emit('chats', this.store.chatList());
     });
 
-    sock.ev.on('contacts.upsert', (cs) => {
-      for (const c of cs) this.store.setContact(jidNormalizedUser(c.id), c.name || c.notify || c.verifiedName);
+    const takeContacts = (cs) => {
+      let got = 0;
+      for (const c of cs || []) {
+        if (!c?.id) continue;
+        const name = c.name || c.verifiedName || c.notify || null;
+        if (!name) continue;
+        this.store.setContact(jidNormalizedUser(c.id), name);
+        // The same person reaches us under both addressing schemes, so index
+        // the raw id too rather than only the normalised one.
+        this.store.setContact(String(c.id), name);
+        got++;
+      }
+      if (got) this.scheduleBackfill();
+    };
+    sock.ev.on('contacts.upsert', takeContacts);
+    sock.ev.on('contacts.update', takeContacts);
+
+    sock.ev.on('groups.upsert', (gs) => {
+      for (const g of gs) if (g.id && g.subject) this.nameGroup(g.id, g.subject);
     });
-    sock.ev.on('contacts.update', (cs) => {
-      for (const c of cs) if (c.id) this.store.setContact(jidNormalizedUser(c.id), c.name || c.notify || c.verifiedName);
+    sock.ev.on('groups.update', (gs) => {
+      for (const g of gs) if (g.id && g.subject) this.nameGroup(g.id, g.subject);
     });
 
     sock.ev.on('chats.upsert', (cs) => {
@@ -294,6 +310,55 @@ export class WhatsApp extends EventEmitter {
 
   // ---- normalisation -------------------------------------------
 
+  // Ask for everything WhatsApp will tell us about names, once, on connect.
+  async hydrate() {
+    try {
+      const groups = await this.sock.groupFetchAllParticipating();
+      for (const [jid, meta] of Object.entries(groups || {})) {
+        if (meta?.subject) this.nameGroup(jid, meta.subject);
+      }
+    } catch (e) {
+      this.emit('error', 'Could not load group names: ' + e.message);
+    }
+
+    // Address book names are not part of history sync. They live in app
+    // state, which has to be asked for explicitly, and arrive back through
+    // contacts.upsert. Without this every one to one chat stays a number.
+    for (const collection of ['critical_unblock_low', 'regular_low', 'regular']) {
+      try {
+        await this.sock.resyncAppState([collection], false);
+      } catch { /* a collection that is not ready yet is not fatal */ }
+    }
+
+    this.scheduleBackfill(300);
+  }
+
+  nameGroup(jid, subject) {
+    this.store.setContact(jid, subject);
+    const chat = this.store.upsertChat({ id: jid, network: 'whatsapp', isGroup: true, name: subject });
+    this.emit('chat', chat);
+  }
+
+  // Names arrive in waves. Rather than patch chats one at a time, sweep once
+  // things settle and push whatever improved.
+  scheduleBackfill(delay = 1500) {
+    clearTimeout(this._backfill);
+    this._backfill = setTimeout(() => this.backfillNames(), delay);
+  }
+
+  backfillNames() {
+    let changed = 0;
+    for (const chat of this.store.chatList()) {
+      if (chat.network === 'telegram') continue;
+      const better = this.nameFor(chat.id);
+      if (better && better !== chat.name && !isPlaceholder(better)) {
+        this.store.upsertChat({ id: chat.id, name: better });
+        changed++;
+      }
+    }
+    if (changed) this.emit('chats', this.store.chatList());
+  }
+
   // Baileys keeps a LID to phone-number map once it has seen both. Use it when
   // it is there, and degrade quietly when it is not.
   phoneFor(jid) {
@@ -306,13 +371,23 @@ export class WhatsApp extends EventEmitter {
   }
 
   nameFor(jid) {
-    const direct = this.store.contactName(jid);
+    const id = String(jid);
+    const direct = this.store.contactName(id) || this.store.contactName(jidNormalizedUser(id));
     if (direct) return direct;
-    if (isLidUser(String(jid))) {
-      const pn = this.phoneFor(jid);
-      if (pn) return this.store.contactName(pn) || prettyJid(pn);
+    if (isLidUser(id)) {
+      const pn = this.phoneFor(id);
+      if (pn) {
+        const viaPn = this.store.contactName(pn) || this.store.contactName(jidNormalizedUser(pn));
+        if (viaPn) return viaPn;
+        return prettyJid(pn);
+      }
     }
-    return prettyJid(jid);
+    // The reverse direction: a chat addressed by number whose name we only
+    // learned under its LID.
+    const bare = id.split('@')[0].split(':')[0];
+    const alt = this.store.contactName(bare + '@lid') || this.store.contactName(bare + '@s.whatsapp.net');
+    if (alt) return alt;
+    return prettyJid(id);
   }
 
   ingestChat(c) {
@@ -361,7 +436,10 @@ export class WhatsApp extends EventEmitter {
     const isGroup = chatId.endsWith('@g.us');
     const authorJid = fromMe ? (this.me?.id || 'me') : jidNormalizedUser(m.key.participant || chatId);
 
-    if (m.pushName && !fromMe) this.store.setContact(authorJid, m.pushName);
+    if (m.pushName && !fromMe) {
+      this.store.setContact(authorJid, m.pushName);
+      if (!isGroup) this.store.setContact(chatId, m.pushName);
+    }
 
     const ctx = inner.extendedTextMessage?.contextInfo || body?.contextInfo;
     const quotedBody = ctx?.quotedMessage ? unwrap(ctx.quotedMessage) : null;
@@ -694,6 +772,10 @@ function toMs(ts) {
   const n = typeof ts === 'object' && ts.low != null ? ts.low : Number(ts);
   if (!n) return 0;
   return n < 1e12 ? n * 1000 : n;
+}
+
+function isPlaceholder(name) {
+  return /^(\+\d+|Group [0-9a-f]{4}|WhatsApp user|Unknown)$/i.test(String(name || ''));
 }
 
 function prettyJid(jid) {
