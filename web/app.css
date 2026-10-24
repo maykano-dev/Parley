@@ -1233,3 +1233,114 @@ body.in-vault #link-view, body.in-vault #accounts-view { display: none; }
 .cc-list button .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cc-list button .dl { color: var(--ink-3); font-variant-numeric: tabular-nums; flex: none; }
 .cc-empty { padding: 18px 12px; text-align: center; font-size: 12.5px; color: var(--ink-3); }
+
+/* ---- profile card ---- */
+.pcard { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 20px; }
+.pcard .ring {
+  position: relative;
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  padding: 3px;
+  background: linear-gradient(145deg, var(--accent), var(--accent-deep));
+  margin-bottom: 14px;
+}
+.pcard .ring > * { width: 100%; height: 100%; border-radius: 50%; display: grid; place-items: center; font-size: 30px; font-weight: 600; color: #fff; overflow: hidden; }
+.pcard .ring img { object-fit: cover; }
+.pcard .ring .net {
+  position: absolute; right: -2px; bottom: -2px;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  border: 3px solid var(--bg);
+  padding: 0;
+}
+.pcard .ring .net svg { width: 12px; height: 12px; color: #fff; }
+.pcard .nm { font-size: 20px; font-weight: 600; letter-spacing: -.022em; display: flex; align-items: center; gap: 7px; }
+.pcard .un { font-size: 13.5px; color: var(--accent); margin-top: 3px; }
+.pcard .bio { font-size: 13px; color: var(--ink-2); margin-top: 10px; max-width: 34ch; line-height: 1.55; }
+.verif { width: 16px; height: 16px; color: var(--accent); }
+.prem { font-size: 10px; font-weight: 700; letter-spacing: .05em; padding: 2px 6px; border-radius: 5px; background: linear-gradient(145deg,#f7a93b,#e2762d); color: #fff; }
+
+.copyable { cursor: pointer; }
+.copyable:hover .v { color: var(--accent); }
+
+/* ==========================================================
+   Media viewer
+   ========================================================== */
+
+#lightbox {
+  position: fixed; inset: 0; z-index: 70;
+  display: none;
+  background: rgba(0,0,0,.92);
+  backdrop-filter: blur(14px);
+  padding: 0;
+}
+#lightbox.on { display: block; }
+
+.lb-bar {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 20px;
+  z-index: 2;
+  background: linear-gradient(180deg, rgba(0,0,0,.6), transparent);
+  color: #fff;
+}
+.lb-meta { flex: 1; min-width: 0; }
+#lb-from { font-size: 13.5px; font-weight: 550; }
+#lb-count { font-size: 11.5px; opacity: .6; margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+.lb-zoom { display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,.1); border-radius: 100px; padding: 3px; }
+.lb-zoom button { width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent; color: #fff; display: grid; place-items: center; }
+.lb-zoom button:hover { background: rgba(255,255,255,.16); }
+.lb-zoom button svg { width: 15px; height: 15px; }
+#lb-zoom { font-size: 11.5px; min-width: 42px; text-align: center; font-variant-numeric: tabular-nums; }
+
+.lb-btn { width: 36px; height: 36px; border: 0; border-radius: 50%; background: rgba(255,255,255,.1); color: #fff; display: grid; place-items: center; flex: none; }
+.lb-btn:hover { background: rgba(255,255,255,.2); }
+.lb-btn svg { width: 17px; height: 17px; }
+
+#lb-stage { position: absolute; inset: 0; display: grid; place-items: center; padding: 76px 88px; overflow: hidden; }
+#lb-img { max-width: 100%; max-height: 100%; border-radius: 8px; cursor: zoom-in; transition: transform .18s ease; user-select: none; -webkit-user-drag: none; }
+#lb-video { max-width: 100%; max-height: 100%; border-radius: 8px; display: none; background: #000; }
+
+.lb-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  left: 18px;
+  width: 46px; height: 46px;
+  border: 0; border-radius: 50%;
+  background: rgba(255,255,255,.1);
+  color: #fff;
+  display: grid; place-items: center;
+  z-index: 2;
+}
+.lb-nav.right { left: auto; right: 18px; }
+.lb-nav:hover { background: rgba(255,255,255,.22); }
+.lb-nav svg { width: 22px; height: 22px; }
+
+#lb-caption {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 28px 24px 22px;
+  text-align: center;
+  color: #fff;
+  font-size: 13.5px;
+  line-height: 1.5;
+  background: linear-gradient(0deg, rgba(0,0,0,.7), transparent);
+  z-index: 2;
+}
+
+/* bounded media inside bubbles */
+.media-img {
+  max-width: 340px;
+  max-height: 420px;
+  width: auto;
+  object-fit: cover;
+}
+.media-video { position: relative; max-width: 340px; border-radius: calc(var(--radius) - 6px); overflow: hidden; margin-bottom: 6px; background: var(--well); }
+.media-video video { display: block; width: 100%; max-height: 420px; object-fit: cover; }
+.vplay { position: absolute; inset: 0; margin: auto; width: 54px; height: 54px; border: 0; border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; display: grid; place-items: center; }
+.vplay:hover { background: rgba(0,0,0,.75); }
+.vplay svg { width: 22px; height: 22px; margin-left: 2px; }
+.vdur { position: absolute; right: 8px; bottom: 8px; padding: 2px 7px; border-radius: 6px; background: rgba(0,0,0,.65); color: #fff; font-size: 11px; font-variant-numeric: tabular-nums; }
+
+/* profile ring: only the photo layer fills it, never the badge */
+.pcard .ring > .net { width: 26px; height: 26px; }

@@ -259,6 +259,7 @@ export class Telegram extends EventEmitter {
       pinned: false,
       archived: false,
     };
+    if (c.photo?.small?.id) chat.photoId = c.photo.small.id;
     if (c.last_message) {
       chat.lastTs = toMs(c.last_message.date);
       chat.lastText = previewOf(c.last_message);
@@ -373,6 +374,70 @@ export class Telegram extends EventEmitter {
       this.emit('error', 'Telegram history: ' + e.message);
       return 0;
     }
+  }
+
+  // ---- profile --------------------------------------------------
+
+  async profile() {
+    if (this.status !== 'online') return null;
+    const me = await this.client.invoke({ _: 'getMe' });
+    let full = null;
+    try {
+      full = await this.client.invoke({ _: 'getUserFullInfo', user_id: me.id });
+    } catch { /* bio is optional */ }
+
+    // getMe does not always carry profile_photo, so fall back through the
+    // two other places TDLib keeps it before giving up.
+    let photo = me.profile_photo?.big?.id || me.profile_photo?.small?.id || null;
+    if (!photo) {
+      try {
+        const set = await this.client.invoke({ _: 'getUserProfilePhotos', user_id: me.id, offset: 0, limit: 1 });
+        const sizes = set?.photos?.[0]?.sizes || [];
+        photo = sizes[sizes.length - 1]?.photo?.id || null;
+      } catch { /* fall through */ }
+    }
+    if (!photo) {
+      try {
+        const chat = await this.client.invoke({ _: 'getChat', chat_id: me.id });
+        photo = chat?.photo?.big?.id || chat?.photo?.small?.id || null;
+      } catch { /* no photo anywhere */ }
+    }
+    if (photo) this.files.set('tg:self', { id: photo, mime: 'image/jpeg', name: 'avatar.jpg' });
+
+    const usernames = me.usernames?.active_usernames || [];
+    return {
+      id: 'tg:' + me.id,
+      network: 'telegram',
+      name: [me.first_name, me.last_name].filter(Boolean).join(' ') || 'You',
+      firstName: me.first_name || '',
+      lastName: me.last_name || '',
+      username: me.usernames?.editable_username || usernames[0] || null,
+      otherUsernames: usernames.slice(1),
+      phone: me.phone_number ? '+' + me.phone_number : null,
+      bio: full?.bio?.text || null,
+      isPremium: !!me.is_premium,
+      isVerified: !!me.is_verified,
+      hasPhoto: !!photo,
+      avatarUrl: photo ? '/avatar/tg:self' : null,
+    };
+  }
+
+  // Avatars are just files, so reuse the download path.
+  async avatarFor(id) {
+    if (id === 'tg:self') {
+      if (!this.files.has('tg:self')) await this.profile();
+      return this.media('tg:self');
+    }
+    let photoId = this.store.getChat(id)?.photoId;
+    if (!photoId) {
+      // Ask Telegram directly rather than assuming the sync carried it.
+      const chat = await this.client.invoke({ _: 'getChat', chat_id: Number(String(id).replace('tg:', '')) });
+      photoId = chat?.photo?.small?.id || chat?.photo?.big?.id;
+      if (photoId) this.store.upsertChat({ id, photoId });
+    }
+    if (!photoId) throw new Error('No photo for that chat.');
+    this.files.set('photo:' + id, { id: photoId, mime: 'image/jpeg', name: 'avatar.jpg' });
+    return this.media('photo:' + id);
   }
 
   // ---- actions --------------------------------------------------

@@ -114,24 +114,43 @@ function hue(id) {
   return HUES[h % HUES.length];
 }
 function initials(name) {
-  const parts = String(name || '?').replace(/^\+/, '').trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
+  const raw = String(name || '?').replace(/^\+/, '').trim();
+  if (!raw) return '?';
+  // Split on grapheme clusters so emoji and flags survive intact.
+  const graphemes = typeof Intl !== 'undefined' && Intl.Segmenter
+    ? [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(raw)].map((g) => g.segment)
+    : [...raw];
+  const first = graphemes[0];
+  // A name that starts with an emoji is best shown as that emoji, whole.
+  if (/\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(first)) return first;
+  const words = raw.split(/\s+/).filter(Boolean);
+  if (words.length === 1) return graphemes.slice(0, 2).join('').toUpperCase();
+  const second = [...words[1]][0] || '';
+  return (first + second).toUpperCase();
 }
-function avatar(node, name, id, size, net) {
+function avatar(node, name, id, size, net, photo) {
   node.className = 'avatar av';
   node.style.width = node.style.height = size + 'px';
   node.style.fontSize = Math.round(size * 0.34) + 'px';
   node.style.background = 'linear-gradient(145deg,' + hue(id || name || 'x') + ')';
   node.textContent = initials(name);
-  if (net) {
-    const dot = el('span', 'net-dot');
-    dot.style.background = NETWORKS[net]?.colour || 'var(--accent)';
-    dot.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="' + (NETWORKS[net]?.path || '') + '"/></svg>';
-    node.appendChild(dot);
+  if (photo) {
+    const img = el('img');
+    img.src = photo;
+    img.alt = '';
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;display:block';
+    img.onload = () => { node.textContent = ''; node.appendChild(img); if (net) node.appendChild(dotFor(net)); };
+    img.onerror = () => { /* keep the initials */ };
   }
+  if (net) node.appendChild(dotFor(net));
   return node;
+}
+
+function dotFor(net) {
+  const dot = el('span', 'net-dot');
+  dot.style.background = NETWORKS[net]?.colour || 'var(--accent)';
+  dot.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="' + (NETWORKS[net]?.path || '') + '"/></svg>';
+  return dot;
 }
 function clockTime(ts) {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -242,6 +261,12 @@ function handle(m) {
       } else if (m.status === 'connecting' && sheetOpen && wasConnecting !== 'connecting') {
         tgBusy('Signing you in');
       }
+      break;
+    }
+    case 'profile': {
+      S.profiles[m.network] = m.profile;
+      const host = document.getElementById('profile-host');
+      if (host) renderProfile(host, m.profile, m.network);
       break;
     }
     case 'tgAuthError': {
@@ -474,7 +499,7 @@ function renderChats() {
     b.setAttribute('aria-current', String(c.id === S.active));
 
     const av = el('div');
-    avatar(av, c.name, c.id, 40, c.network);
+    avatar(av, c.name, c.id, 40, c.network, c.photoId ? '/avatar/' + encodeURIComponent(c.id) : null);
     b.appendChild(av);
 
     const cell = el('div', 'cell');
@@ -540,7 +565,7 @@ function openChat(id) {
 function paintThreadHead() {
   const c = S.chats.find((x) => x.id === S.active);
   if (!c) return;
-  avatar($('#th-av'), c.name, c.id, 38, c.network);
+  avatar($('#th-av'), c.name, c.id, 38, c.network, c.photoId ? '/avatar/' + encodeURIComponent(c.id) : null);
   $('#th-name').textContent = c.name;
   const net = NETWORKS[c.network] || NETWORKS.whatsapp;
   const tag = $('#th-net');
@@ -634,16 +659,25 @@ function bubble(m) {
     img.src = '/media/' + encodeURIComponent(m.id);
     img.alt = m.text || 'Attachment';
     img.loading = 'lazy';
-    img.onclick = () => openLightbox(img.src, img.alt);
+    img.onclick = () => openViewer(m.id);
     img.onerror = () => { img.replaceWith(fallbackAttachment('Photo could not be decrypted')); };
-    if (m.kind === 'sticker') img.style.maxWidth = '180px';
+    if (m.kind === 'sticker') { img.style.maxWidth = '170px'; img.style.background = 'transparent'; }
     b.appendChild(img);
   } else if (m.kind === 'video') {
+    const shell = el('div', 'media-video');
     const v = document.createElement('video');
     v.src = '/media/' + encodeURIComponent(m.id);
-    v.controls = true;
-    v.style.cssText = 'max-width:100%;border-radius:calc(var(--radius) - 6px);margin-bottom:6px';
-    b.appendChild(v);
+    v.preload = 'metadata';
+    const play = el('button', 'vplay');
+    play.setAttribute('aria-label', 'Play video');
+    play.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+    play.onclick = () => openViewer(m.id);
+    shell.append(v, play);
+    if (m.durationSec) {
+      const d = el('span', 'vdur', mmss(m.durationSec));
+      shell.appendChild(d);
+    }
+    b.appendChild(shell);
   } else if (m.kind === 'audio') {
     b.appendChild(voiceNote(m));
   } else if (m.kind === 'document') {
@@ -872,13 +906,101 @@ $('#btn-back').onclick = () => {
 
 // ---------------- lightbox ----------------
 
-function openLightbox(src, alt) {
-  $('#lb-img').src = src;
-  $('#lb-img').alt = alt || '';
+// Viewer: walks every image and video in the open conversation, so arrows
+// and swipes move between them rather than dead ending on one file.
+const VIEW = { items: [], at: 0, zoom: 1, panX: 0, panY: 0, dragging: false };
+
+function viewerItems() {
+  return (S.messages.get(S.active) || []).filter((m) => m.kind === 'image' || m.kind === 'video' || m.kind === 'sticker');
+}
+
+function openViewer(id) {
+  VIEW.items = viewerItems();
+  VIEW.at = Math.max(0, VIEW.items.findIndex((m) => m.id === id));
+  paintViewer();
   $('#lightbox').classList.add('on');
 }
-$('#lb-close').onclick = () => $('#lightbox').classList.remove('on');
-$('#lightbox').onclick = (e) => { if (e.target.id === 'lightbox') $('#lightbox').classList.remove('on'); };
+function closeViewer() {
+  $('#lightbox').classList.remove('on');
+  const v = $('#lb-video');
+  if (v) { v.pause(); v.removeAttribute('src'); v.load(); }
+}
+function stepViewer(d) {
+  if (!VIEW.items.length) return;
+  VIEW.at = (VIEW.at + d + VIEW.items.length) % VIEW.items.length;
+  paintViewer();
+}
+function setZoom(z) {
+  VIEW.zoom = Math.min(6, Math.max(1, z));
+  if (VIEW.zoom === 1) { VIEW.panX = 0; VIEW.panY = 0; }
+  const img = $('#lb-img');
+  img.style.transform = 'translate(' + VIEW.panX + 'px,' + VIEW.panY + 'px) scale(' + VIEW.zoom + ')';
+  img.style.cursor = VIEW.zoom > 1 ? 'grab' : 'zoom-in';
+  $('#lb-zoom').textContent = Math.round(VIEW.zoom * 100) + '%';
+}
+
+function paintViewer() {
+  const m = VIEW.items[VIEW.at];
+  if (!m) return;
+  const src = '/media/' + encodeURIComponent(m.id);
+  const isVideo = m.kind === 'video';
+  const img = $('#lb-img');
+  const vid = $('#lb-video');
+
+  img.style.display = isVideo ? 'none' : 'block';
+  vid.style.display = isVideo ? 'block' : 'none';
+  $('#lb-zoomrow').style.display = isVideo ? 'none' : 'flex';
+
+  if (isVideo) {
+    vid.src = src;
+    vid.play().catch(() => { /* autoplay may be blocked, controls are there */ });
+  } else {
+    vid.pause();
+    img.src = src;
+    img.alt = m.text || 'Attachment';
+    VIEW.zoom = 1; VIEW.panX = 0; VIEW.panY = 0;
+    setZoom(1);
+  }
+
+  $('#lb-from').textContent = (m.fromMe ? 'You' : m.author || '') + ' · ' + listTime(m.ts);
+  $('#lb-caption').textContent = m.text || '';
+  $('#lb-caption').style.display = m.text ? 'block' : 'none';
+  $('#lb-count').textContent = VIEW.items.length > 1 ? (VIEW.at + 1) + ' of ' + VIEW.items.length : '';
+  $('#lb-dl').href = src + '?dl=1';
+  $('#lb-prev').style.visibility = VIEW.items.length > 1 ? 'visible' : 'hidden';
+  $('#lb-next').style.visibility = VIEW.items.length > 1 ? 'visible' : 'hidden';
+}
+
+$('#lb-close').onclick = closeViewer;
+$('#lb-prev').onclick = (e) => { e.stopPropagation(); stepViewer(-1); };
+$('#lb-next').onclick = (e) => { e.stopPropagation(); stepViewer(1); };
+$('#lb-in').onclick = (e) => { e.stopPropagation(); setZoom(VIEW.zoom + 0.5); };
+$('#lb-out').onclick = (e) => { e.stopPropagation(); setZoom(VIEW.zoom - 0.5); };
+$('#lightbox').onclick = (e) => { if (e.target.id === 'lightbox' || e.target.id === 'lb-stage') closeViewer(); };
+
+$('#lb-img').onclick = (e) => { e.stopPropagation(); setZoom(VIEW.zoom > 1 ? 1 : 2); };
+$('#lb-img').onwheel = (e) => { e.preventDefault(); setZoom(VIEW.zoom + (e.deltaY < 0 ? 0.3 : -0.3)); };
+$('#lb-img').onmousedown = (e) => {
+  if (VIEW.zoom <= 1) return;
+  e.preventDefault();
+  VIEW.dragging = { x: e.clientX - VIEW.panX, y: e.clientY - VIEW.panY };
+};
+window.addEventListener('mousemove', (e) => {
+  if (!VIEW.dragging) return;
+  VIEW.panX = e.clientX - VIEW.dragging.x;
+  VIEW.panY = e.clientY - VIEW.dragging.y;
+  setZoom(VIEW.zoom);
+});
+window.addEventListener('mouseup', () => { VIEW.dragging = false; });
+
+document.addEventListener('keydown', (e) => {
+  if (!$('#lightbox').classList.contains('on')) return;
+  if (e.key === 'ArrowRight') { e.preventDefault(); stepViewer(1); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); stepViewer(-1); }
+  if (e.key === '+' || e.key === '=') { e.preventDefault(); setZoom(VIEW.zoom + 0.5); }
+  if (e.key === '-') { e.preventDefault(); setZoom(VIEW.zoom - 0.5); }
+  if (e.key === 'Escape') closeViewer();
+});
 
 // ---------------- sheets ----------------
 
@@ -1599,7 +1721,13 @@ function vaultTile(i) {
   meta.textContent = i.from + ' · ' + listTime(i.ts);
   t.appendChild(meta);
   t.appendChild(starBtn(i));
-  t.onclick = () => { if (i.kind === 'image') openLightbox(src, i.name); else window.open(src, '_blank'); };
+  t.onclick = () => {
+    VIEW.items = vaultVisible().filter((x) => x.kind === 'image' || x.kind === 'video')
+      .map((x) => ({ id: x.id, kind: x.kind, text: x.caption, author: x.from, ts: x.ts, fromMe: x.fromMe }));
+    VIEW.at = Math.max(0, VIEW.items.findIndex((x) => x.id === i.id));
+    paintViewer();
+    $('#lightbox').classList.add('on');
+  };
   return t;
 }
 
@@ -1691,23 +1819,11 @@ function openTelegram() {
   }
 
   if (tgLive()) {
-    openSheet('Telegram', (host) => {
-      const top = el('div', 'profile-top');
-      const av = el('div');
-      avatar(av, st.me?.name || 'Telegram', st.me?.id || 'tg', 72, 'telegram');
-      top.append(av, el('div', 'nm', st.me?.name || 'Connected'), el('div', 'sub', 'Telegram, connected through TDLib'));
-      host.appendChild(top);
-
-      const card = card_(host, 'This connection');
-      kv(card, 'Status', 'Online');
-      kv(card, 'Library', "TDLib, Telegram's own");
-      kv(card, 'Ban risk', 'None, third party clients are supported');
-
-      const out = el('button', 'btn danger', 'Disconnect Telegram');
-      out.style.marginTop = '14px';
-      out.onclick = () => { sendWS({ t: 'tgLogout' }); $('#overlay').classList.remove('on'); banner('Disconnecting Telegram', '', 2500); };
-      card.appendChild(out);
-    });
+    sendWS({ t: 'profile', network: 'telegram' });
+    openSheet('Your Telegram', (host) => {
+      host.id = 'profile-host';
+      renderProfile(host, S.profiles.telegram, 'telegram');
+    }, { narrow: true });
     return;
   }
 
@@ -1833,6 +1949,82 @@ function openTelegram() {
 
     setTimeout(focusIt, 140);
   }, { narrow: true });
+}
+
+S.profiles = { telegram: null, whatsapp: null };
+
+function renderProfile(host, p, network) {
+  host.innerHTML = '';
+  const net = NETWORKS[network];
+
+  if (!p) {
+    const wait = el('div', 'cc-empty', 'Loading your profile');
+    wait.style.padding = '40px 0';
+    host.appendChild(wait);
+    return;
+  }
+
+  const card = el('div', 'pcard');
+  const ring = el('div', 'ring');
+  const inner = el('div');
+  inner.style.background = 'linear-gradient(145deg,' + hue(p.id) + ')';
+  inner.textContent = initials(p.name);
+  if (p.avatarUrl) {
+    const img = el('img');
+    img.src = p.avatarUrl;
+    img.alt = '';
+    img.onload = () => { inner.textContent = ''; inner.appendChild(img); };
+    img.onerror = () => { /* initials stay */ };
+  }
+  const badge = el('span', 'net');
+  badge.style.background = net.colour;
+  badge.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="' + net.path + '"/></svg>';
+  ring.append(inner, badge);
+
+  const nm = el('div', 'nm');
+  nm.appendChild(document.createTextNode(p.name));
+  if (p.isVerified) {
+    const v = el('span', 'verif');
+    v.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 1.8 3-.3 1 2.8 2.6 1.5-1 2.9 1 2.9-2.6 1.5-1 2.8-3-.3L12 22l-2.4-1.8-3 .3-1-2.8L3 16.2l1-2.9-1-2.9 2.6-1.5 1-2.8 3 .3z" opacity=".25"/><path d="M8.5 12.2l2.3 2.3 4.7-4.7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    nm.appendChild(v);
+  }
+  if (p.isPremium) nm.appendChild(el('span', 'prem', 'PREMIUM'));
+
+  card.append(ring, nm);
+  if (p.username) card.appendChild(el('div', 'un', '@' + p.username));
+  if (p.bio) card.appendChild(el('div', 'bio', p.bio));
+  host.appendChild(card);
+
+  const details = card_(host, 'Profile');
+  if (p.firstName) copyRow(details, 'First name', p.firstName);
+  if (p.lastName) copyRow(details, 'Last name', p.lastName);
+  if (p.phone) copyRow(details, 'Phone', p.phone);
+  if (p.username) copyRow(details, 'Username', '@' + p.username);
+  for (const u of p.otherUsernames || []) copyRow(details, 'Also', '@' + u);
+
+  const conn = card_(host, 'This connection');
+  kv(conn, 'Status', 'Online');
+  kv(conn, 'Library', network === 'telegram' ? "TDLib, Telegram's own" : 'Baileys, companion protocol');
+  kv(conn, 'Ban risk', network === 'telegram' ? 'None, third party clients are supported' : 'Unofficial client, see About');
+
+  const out = el('button', 'btn danger', network === 'telegram' ? 'Disconnect Telegram' : 'Unlink WhatsApp');
+  out.style.marginTop = '14px';
+  out.onclick = () => {
+    sendWS({ t: network === 'telegram' ? 'tgLogout' : 'logout' });
+    $('#overlay').classList.remove('on');
+    banner('Disconnecting', '', 2500);
+  };
+  conn.appendChild(out);
+}
+
+function copyRow(host, k, v) {
+  const row = kv(host, k, v);
+  row.classList.add('copyable');
+  row.title = 'Click to copy';
+  row.onclick = () => navigator.clipboard.writeText(v).then(
+    () => banner('Copied ' + k.toLowerCase(), 'ok', 1400),
+    () => banner('Clipboard refused', 'bad', 2500));
+  return row;
 }
 
 function card_(host, label) {

@@ -41,6 +41,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname.startsWith('/media/')) return serveMedia(url, res);
   if (url.pathname === '/upload' && req.method === 'POST') return receiveUpload(req, url, res);
   if (url.pathname.startsWith('/vault/')) return serveSaved(url, res);
+  if (url.pathname.startsWith('/avatar/')) return serveAvatar(url, res);
 
   let rel = url.pathname === '/' ? '/index.html' : url.pathname;
   const file = path.join(WEB, path.normalize(rel).replace(/^(\.\.[/\\])+/, ''));
@@ -106,6 +107,17 @@ function receiveUpload(req, url, res) {
       res.writeHead(400, { 'content-type': 'text/plain' }).end(e.message);
     }
   });
+}
+
+async function serveAvatar(url, res) {
+  const id = decodeURIComponent(url.pathname.slice('/avatar/'.length));
+  try {
+    const { buffer, mime } = await adapterFor(id).avatarFor(id);
+    res.writeHead(200, { 'content-type': mime, 'content-length': buffer.length, 'cache-control': 'private, max-age=900' }).end(buffer);
+  } catch {
+    // A missing avatar is ordinary. 404 quietly and let the UI fall back.
+    res.writeHead(404, { 'content-type': 'text/plain' }).end('no avatar');
+  }
 }
 
 function serveSaved(url, res) {
@@ -232,6 +244,12 @@ wss.on('connection', (ws) => {
         case 'pair': {
           const code = await wa.requestPairing(msg.phone);
           if (code) ws.send(JSON.stringify({ t: 'pairing', code, phone: msg.phone }));
+          break;
+        }
+        case 'profile': {
+          const which = msg.network === 'telegram' ? tg : wa;
+          const p = await which.profile();
+          ws.send(JSON.stringify({ t: 'profile', network: msg.network, profile: p }));
           break;
         }
         case 'vault': {

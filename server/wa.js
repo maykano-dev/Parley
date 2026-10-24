@@ -429,6 +429,35 @@ export class WhatsApp extends EventEmitter {
     }
   }
 
+  // ---- profile --------------------------------------------------
+
+  async profile() {
+    if (this.status !== 'online' || !this.me) return null;
+    let avatar = null;
+    try {
+      avatar = await this.sock.profilePictureUrl(this.me.id, 'image');
+    } catch { /* no picture, or privacy settings hide it */ }
+    return {
+      id: this.me.id,
+      network: 'whatsapp',
+      name: this.me.name || 'You',
+      phone: '+' + String(this.me.id).split('@')[0].split(':')[0],
+      hasPhoto: !!avatar,
+      avatarUrl: avatar ? '/avatar/' + encodeURIComponent(this.me.id) : null,
+    };
+  }
+
+  async avatarFor(id) {
+    const jid = id === 'self' ? this.me?.id : id;
+    if (!jid) throw new Error('Not connected.');
+    const url = await this.sock.profilePictureUrl(jid, 'image');
+    if (!url) throw new Error('No profile picture.');
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Could not fetch that picture.');
+    const buffer = Buffer.from(await res.arrayBuffer());
+    return { buffer, mime: res.headers.get('content-type') || 'image/jpeg', fileName: 'avatar.jpg' };
+  }
+
   // ---- actions --------------------------------------------------
 
   async send(chatId, text) {

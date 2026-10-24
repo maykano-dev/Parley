@@ -278,11 +278,43 @@
   </div>
 </div>
 
-<div id="lightbox">
-  <button class="icon-btn close" id="lb-close" aria-label="Close">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+<div id="lightbox" role="dialog" aria-modal="true" aria-label="Media viewer">
+  <div class="lb-bar">
+    <div class="lb-meta">
+      <div id="lb-from"></div>
+      <div id="lb-count"></div>
+    </div>
+    <div id="lb-zoomrow" class="lb-zoom">
+      <button id="lb-out" aria-label="Zoom out">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg>
+      </button>
+      <span id="lb-zoom">100%</span>
+      <button id="lb-in" aria-label="Zoom in">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+    <a id="lb-dl" class="lb-btn" download aria-label="Save this file" title="Save">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 11l5 5 5-5"/><path d="M4 18v1.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V18"/></svg>
+    </a>
+    <button id="lb-close" class="lb-btn" aria-label="Close viewer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+
+  <button id="lb-prev" class="lb-nav" aria-label="Previous">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
   </button>
-  <img id="lb-img" alt="">
+
+  <div id="lb-stage">
+    <img id="lb-img" alt="">
+    <video id="lb-video" controls playsinline></video>
+  </div>
+
+  <button id="lb-next" class="lb-nav right" aria-label="Next">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+  </button>
+
+  <div id="lb-caption"></div>
 </div>
 
 <script type="module" src="/app.js"></script>
