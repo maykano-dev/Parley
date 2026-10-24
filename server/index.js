@@ -32,6 +32,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
 
   if (url.pathname.startsWith('/media/')) return serveMedia(url, res);
+  if (url.pathname === '/upload' && req.method === 'POST') return receiveUpload(req, url, res);
 
   let rel = url.pathname === '/' ? '/index.html' : url.pathname;
   const file = path.join(WEB, path.normalize(rel).replace(/^(\.\.[/\\])+/, ''));
@@ -64,6 +65,38 @@ async function serveMedia(url, res) {
   } catch (e) {
     res.writeHead(404, { 'content-type': 'text/plain' }).end(e.message);
   }
+}
+
+const MAX_UPLOAD = 64 * 1024 * 1024;
+
+function receiveUpload(req, url, res) {
+  const chunks = [];
+  let size = 0;
+  req.on('data', (c) => {
+    size += c.length;
+    if (size > MAX_UPLOAD) {
+      res.writeHead(413, { 'content-type': 'text/plain' }).end('Too large. WhatsApp caps attachments at 64MB.');
+      req.destroy();
+      return;
+    }
+    chunks.push(c);
+  });
+  req.on('end', async () => {
+    if (res.headersSent) return;
+    try {
+      const chatId = url.searchParams.get('chatId');
+      if (!chatId) throw new Error('Missing conversation.');
+      await wa.sendMedia(chatId, Buffer.concat(chunks), {
+        mime: req.headers['x-file-type'] || '',
+        fileName: decodeURIComponent(req.headers['x-file-name'] || 'file'),
+        caption: decodeURIComponent(url.searchParams.get('caption') || ''),
+        replyToId: url.searchParams.get('replyTo') || null,
+      });
+      res.writeHead(200, { 'content-type': 'application/json' }).end('{"ok":true}');
+    } catch (e) {
+      res.writeHead(400, { 'content-type': 'text/plain' }).end(e.message);
+    }
+  });
 }
 
 // ---- websocket bridge -------------------------------------------
@@ -113,7 +146,22 @@ wss.on('connection', (ws) => {
           await wa.loadMore(msg.chatId, 50);
           break;
         case 'send':
-          await wa.send(msg.chatId, msg.text);
+          await wa.send(msg.chatId, msg.text, msg.replyTo || null);
+          break;
+        case 'react':
+          await wa.react(msg.chatId, msg.id, msg.emoji);
+          break;
+        case 'edit':
+          await wa.edit(msg.chatId, msg.id, msg.text);
+          break;
+        case 'delete':
+          await wa.remove(msg.chatId, msg.id, msg.forEveryone !== false);
+          break;
+        case 'forward':
+          await wa.forward(msg.toChatId, msg.id);
+          break;
+        case 'modify':
+          await wa.modify(msg.chatId, msg.what || {});
           break;
         case 'sendAudio': {
           const bytes = Buffer.from(msg.data || '', 'base64');
@@ -122,9 +170,11 @@ wss.on('connection', (ws) => {
           // note, so transcode when ffmpeg is on the box and fall back to
           // sending as-is when it is not.
           const ogg = await toOggOpus(bytes).catch(() => null);
-          await wa.sendAudio(msg.chatId, ogg || bytes, {
+          await wa.sendMedia(msg.chatId, ogg || bytes, {
+            ptt: true,
             mime: ogg ? 'audio/ogg; codecs=opus' : (msg.mime || 'audio/webm'),
             seconds: msg.seconds || 0,
+            replyToId: msg.replyTo || null,
           });
           break;
         }
@@ -140,7 +190,7 @@ wss.on('connection', (ws) => {
           ws.send(JSON.stringify({ t: 'results', term: msg.term, results: store.search(msg.term || '') }));
           break;
         case 'connect':
-          await wa.start();
+          await wa.relink();
           break;
         case 'logout':
           await wa.logout();

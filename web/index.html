@@ -92,13 +92,33 @@
 
       <div id="messages" class="scroll"></div>
 
+      <button id="to-bottom" aria-label="Jump to latest">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+        <span class="n" id="to-bottom-n" style="display:none">0</span>
+      </button>
+
       <div class="composer-wrap">
+        <div id="reply-bar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;color:var(--accent);flex:none"><path d="M9 7 3.5 12 9 17"/><path d="M3.5 12H14a6.5 6.5 0 0 1 6.5 6.5v1"/></svg>
+          <div style="min-width:0;flex:1">
+            <div class="who" id="reply-who"></div>
+            <div class="txt" id="reply-txt"></div>
+          </div>
+          <button class="icon-btn" id="reply-cancel" aria-label="Cancel reply">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+
         <div class="composer" id="composer">
-          <button class="icon-btn" id="btn-attach" aria-label="Attach a file" title="Attach">
+          <input type="file" id="file-input" multiple hidden>
+          <button class="icon-btn" id="btn-attach" aria-label="Attach a file" title="Attach, or just drop files anywhere">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5L12.5 20a5 5 0 0 1-7-7l8-8a3.4 3.4 0 0 1 5 5l-8 8a1.8 1.8 0 0 1-2.5-2.5l7.5-7.5"/></svg>
           </button>
           <label class="sr" for="draft">Message</label>
           <textarea id="draft" rows="1" placeholder="Message"></textarea>
+          <button class="icon-btn" id="btn-emoji" aria-label="Emoji" title="Emoji">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0M9 9.5h.01M15 9.5h.01"/></svg>
+          </button>
           <button class="mic" id="btn-mic" aria-label="Record a voice message" title="Hold to record">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 11.2a6.5 6.5 0 0 0 13 0"/><path d="M12 17.8V21"/></svg>
           </button>
@@ -116,9 +136,21 @@
           <button class="btn primary" id="rec-send">Send</button>
         </div>
       </div>
+      <div id="drop">
+        <div class="inner">
+          <div class="glyph">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16"/></svg>
+          </div>
+          <h3>Drop to send</h3>
+          <p>Photos, video, audio and documents, up to 64MB each</p>
+        </div>
+      </div>
     </div>
   </section>
 </div>
+
+<div id="menu" role="menu"></div>
+<div id="emoji"></div>
 
 <!-- ============ SHEETS ============ -->
 <div id="overlay" role="dialog" aria-modal="true">
@@ -187,6 +219,7 @@
         </div>
         <p style="margin:24px 0 0;text-align:center;max-width:40ch;color:var(--ink-2);line-height:1.6">Open WhatsApp on your phone, go to <strong>Linked devices</strong>, and point the camera here.</p>
         <div class="waiting" style="justify-content:center"><span class="live"></span><span id="qr-wait">Waiting for your phone</span></div>
+        <button class="btn" id="btn-newcode" style="margin-top:14px">Get a new code</button>
       </div>
 
       <div id="link-code" style="display:none;flex-direction:column;align-items:center">

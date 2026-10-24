@@ -372,6 +372,7 @@ function renderChats() {
 
     b.appendChild(cell);
     b.onclick = () => openChat(c.id);
+    b.oncontextmenu = (e) => { e.preventDefault(); openChatMenu(e.clientX, e.clientY, c); };
     host.appendChild(b);
   });
 }
@@ -397,6 +398,9 @@ function openChat(id) {
   $('#btn-back').style.display = window.innerWidth <= 900 ? 'grid' : 'none';
   const chat = S.chats.find((c) => c.id === id);
   if (chat) chat.unread = 0;
+  cancelCompose();
+  draft.value = drafts[id] || '';
+  syncComposer();
   sendWS({ t: 'open', chatId: id });
   paintThreadHead();
   renderThread();
@@ -483,6 +487,8 @@ function renderThread() {
 
 function bubble(m) {
   const row = el('div', 'msg ' + (m.fromMe ? 'out' : 'in'));
+  row.dataset.id = m.id;
+  const wrap = el('div', 'bubble-wrap');
   const b = el('div', 'bubble');
 
   if (m.showAuthor) b.appendChild(el('span', 'author', m.author));
@@ -538,11 +544,26 @@ function bubble(m) {
   }
 
   const meta = el('div', 'meta');
+  if (m.edited) meta.appendChild(el('span', 'edited', 'edited'));
   meta.appendChild(el('span', 'ts', clockTime(m.ts)));
   if (m.fromMe) meta.appendChild(tick(m.status));
   b.appendChild(meta);
 
-  row.appendChild(b);
+  const all = (m.reactions || []).map((r) => r.emoji).concat(m.myReaction ? [m.myReaction] : []).filter(Boolean);
+  if (all.length) {
+    const rx = el('div', 'reactions');
+    for (const e of [...new Set(all)]) rx.appendChild(el('span', null, e));
+    b.appendChild(rx);
+  }
+
+  const act = el('button', 'act');
+  act.setAttribute('aria-label', 'Message actions');
+  act.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>';
+  act.onclick = (e) => { e.stopPropagation(); openMenu(e.clientX, e.clientY, m); };
+
+  wrap.append(b, act);
+  row.appendChild(wrap);
+  row.oncontextmenu = (e) => { e.preventDefault(); openMenu(e.clientX, e.clientY, m); };
   return row;
 }
 
@@ -634,6 +655,8 @@ function syncComposer() {
 draft.addEventListener('input', () => {
   syncComposer();
   if (!S.active) return;
+  if (draft.value.trim()) drafts[S.active] = draft.value; else delete drafts[S.active];
+  saveDrafts();
   sendWS({ t: 'typing', chatId: S.active, on: true });
   clearTimeout(S.typingTimer);
   S.typingTimer = setTimeout(() => sendWS({ t: 'typing', chatId: S.active, on: false }), 2200);
@@ -641,17 +664,7 @@ draft.addEventListener('input', () => {
 draft.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
 });
-$('#btn-send').onclick = doSend;
 
-function doSend() {
-  const text = draft.value.trim();
-  if (!text || !S.active) return;
-  sendWS({ t: 'send', chatId: S.active, text });
-  draft.value = '';
-  syncComposer();
-}
-
-$('#btn-attach').onclick = () => banner('File attachments are not wired yet. Text, voice and receiving every media type all work.', '', 5000);
 
 // ---- voice recording ----
 let rec = null, chunks = [], recStart = 0, recTick = null;
@@ -996,6 +1009,12 @@ function showCode(code) {
   $('#code-wait').textContent = 'Waiting for your phone to approve this code';
 }
 
+$('#btn-newcode').onclick = () => {
+  $('#qr-img').removeAttribute('src');
+  $('#qr-wait').textContent = 'Asking for a fresh code';
+  sendWS({ t: 'connect' });
+};
+
 $('#btn-pair').onclick = () => {
   const phone = $('#phone').value.replace(/[^0-9]/g, '');
   if (phone.length < 8) { banner('Enter the full number with country code, digits only', 'bad', 4000); return; }
@@ -1013,4 +1032,299 @@ connect();
 
 window.addEventListener('resize', () => {
   $('#btn-back').style.display = (window.innerWidth <= 900 && S.active) ? 'grid' : 'none';
+});
+
+// ==========================================================
+// Interaction layer
+// ==========================================================
+
+const ICON = {
+  reply: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7 3.5 12 9 17"/><path d="M3.5 12H14a6.5 6.5 0 0 1 6.5 6.5v1"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M15 9V6.5A2.5 2.5 0 0 0 12.5 4h-6A2.5 2.5 0 0 0 4 6.5v6A2.5 2.5 0 0 0 6.5 15H9"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6.5A2.5 2.5 0 0 0 4 6.5v11A2.5 2.5 0 0 0 6.5 20h11a2.5 2.5 0 0 0 2.5-2.5V13"/><path d="M17.6 3.6a2 2 0 0 1 2.8 2.8L13 13.8l-3.5 1 1-3.5z"/></svg>',
+  forward: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7l5.5 5L15 17"/><path d="M20.5 12H10a6.5 6.5 0 0 0-6.5 6.5v1"/></svg>',
+  save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 11l5 5 5-5"/><path d="M4 18v1.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V18"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 12.5A1.5 1.5 0 0 0 8.5 21h7a1.5 1.5 0 0 0 1.5-1.5L18 7M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M8 3h8l-1 7 3 3H6l3-3z"/></svg>',
+  mute: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6.5 9H3v6h3.5L11 19z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>',
+  archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4.5" rx="1.5"/><path d="M5 8.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8.5M10 12.5h4"/></svg>',
+  unread: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/></svg>',
+};
+
+const QUICK = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+// ---- context menu ----------------------------------------
+
+const menu = $('#menu');
+let menuFor = null;
+
+function closeMenu() { menu.classList.remove('on'); menuFor = null; }
+document.addEventListener('click', (e) => { if (!menu.contains(e.target)) closeMenu(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMenu(); hideEmoji(); } });
+$('#messages').addEventListener('scroll', closeMenu);
+
+function item(label, icon, fn, cls) {
+  const b = el('button', cls || null);
+  b.innerHTML = icon + '<span></span>';
+  b.lastChild.textContent = label;
+  b.onclick = () => { closeMenu(); fn(); };
+  return b;
+}
+
+function openMenu(x, y, m) {
+  menuFor = m;
+  menu.innerHTML = '';
+
+  const quick = el('div', 'quick');
+  for (const e of QUICK) {
+    const b = el('button', null, e);
+    b.setAttribute('aria-label', 'React ' + e);
+    b.onclick = () => { closeMenu(); sendWS({ t: 'react', chatId: S.active, id: m.id, emoji: m.myReaction === e ? '' : e }); };
+    quick.appendChild(b);
+  }
+  menu.appendChild(quick);
+
+  menu.appendChild(item('Reply', ICON.reply, () => startReply(m)));
+  if (m.text) menu.appendChild(item('Copy text', ICON.copy, () => {
+    navigator.clipboard.writeText(m.text).then(() => banner('Copied', 'ok', 1200), () => banner('Clipboard refused', 'bad', 2500));
+  }));
+  if (m.hasMedia) menu.appendChild(item('Save file', ICON.save, () => {
+    const a = document.createElement('a');
+    a.href = '/media/' + encodeURIComponent(m.id) + '?dl=1';
+    a.download = m.fileName || '';
+    a.click();
+  }));
+  menu.appendChild(item('Forward', ICON.forward, () => startForward(m)));
+
+  const editable = m.fromMe && m.kind === 'text' && (Date.now() - m.ts) < 15 * 60 * 1000;
+  if (editable) menu.appendChild(item('Edit', ICON.edit, () => startEdit(m)));
+
+  if (m.fromMe) {
+    menu.appendChild(document.createElement('hr'));
+    menu.appendChild(item('Delete for everyone', ICON.trash, () => {
+      sendWS({ t: 'delete', chatId: S.active, id: m.id, forEveryone: true });
+    }, 'danger'));
+  }
+
+  menu.classList.add('on');
+  const r = menu.getBoundingClientRect();
+  menu.style.left = Math.min(x, window.innerWidth - r.width - 12) + 'px';
+  menu.style.top = Math.min(y, window.innerHeight - r.height - 12) + 'px';
+}
+
+// ---- chat row menu ---------------------------------------
+
+function openChatMenu(x, y, c) {
+  menu.innerHTML = '';
+  menu.appendChild(item(c.pinned ? 'Unpin' : 'Pin', ICON.pin, () => sendWS({ t: 'modify', chatId: c.id, what: { pin: !c.pinned } })));
+  menu.appendChild(item(c.muted ? 'Unmute' : 'Mute for 8 hours', ICON.mute, () => sendWS({ t: 'modify', chatId: c.id, what: { mute: !c.muted } })));
+  menu.appendChild(item(c.archived ? 'Move out of archive' : 'Archive', ICON.archive, () => sendWS({ t: 'modify', chatId: c.id, what: { archive: !c.archived } })));
+  menu.appendChild(item(c.unread ? 'Mark as read' : 'Mark as unread', ICON.unread, () => sendWS({ t: 'modify', chatId: c.id, what: { unread: !c.unread } })));
+  menu.classList.add('on');
+  const r = menu.getBoundingClientRect();
+  menu.style.left = Math.min(x, window.innerWidth - r.width - 12) + 'px';
+  menu.style.top = Math.min(y, window.innerHeight - r.height - 12) + 'px';
+}
+
+// ---- reply, edit, forward --------------------------------
+
+let replyTo = null;
+let editing = null;
+
+function startReply(m) {
+  replyTo = m;
+  editing = null;
+  $('#reply-who').textContent = m.fromMe ? 'You' : (m.author || 'Reply');
+  $('#reply-txt').textContent = m.text || (m.kind === 'audio' ? 'Voice note' : 'Attachment');
+  $('#reply-bar').classList.add('on');
+  draft.focus();
+}
+function startEdit(m) {
+  editing = m;
+  replyTo = null;
+  draft.value = m.text;
+  syncComposer();
+  $('#reply-who').textContent = 'Editing';
+  $('#reply-txt').textContent = m.text;
+  $('#reply-bar').classList.add('on');
+  draft.focus();
+}
+function cancelCompose() {
+  replyTo = null;
+  editing = null;
+  $('#reply-bar').classList.remove('on');
+}
+$('#reply-cancel').onclick = cancelCompose;
+
+function startForward(m) {
+  openSheet('Forward to', (host) => {
+    const note = el('p', null, 'Pick a conversation. The message is sent as a forward, which is what the other side will see.');
+    note.style.cssText = 'margin:0 0 16px;color:var(--ink-2);font-size:13px';
+    host.appendChild(note);
+    for (const c of S.chats.filter((x) => !x.archived).slice(0, 40)) {
+      const b = el('button', 'row');
+      b.style.cssText = 'padding:9px 10px';
+      const av = el('div');
+      avatar(av, c.name, c.id, 36, c.network);
+      const cell = el('div', 'cell');
+      cell.style.borderBottom = 'none';
+      cell.appendChild(el('div', 'name', c.name));
+      b.append(av, cell);
+      b.onclick = () => {
+        $('#overlay').classList.remove('on');
+        sendWS({ t: 'forward', toChatId: c.id, id: m.id });
+        banner('Forwarded to ' + c.name, 'ok', 2200);
+      };
+      host.appendChild(b);
+    }
+  });
+}
+
+// ---- sending, now reply and edit aware -------------------
+
+function doSend() {
+  const text = draft.value.trim();
+  if (!text || !S.active) return;
+  if (editing) {
+    sendWS({ t: 'edit', chatId: S.active, id: editing.id, text });
+  } else {
+    sendWS({ t: 'send', chatId: S.active, text, replyTo: replyTo ? replyTo.id : null });
+  }
+  draft.value = '';
+  delete drafts[S.active];
+  cancelCompose();
+  syncComposer();
+}
+$('#btn-send').onclick = doSend;
+
+// ---- per chat drafts -------------------------------------
+
+const drafts = load('drafts', {});
+function saveDrafts() { save('drafts', drafts); }
+
+// ---- attachments: drop, paste, picker --------------------
+
+const dropZone = $('#drop');
+let dragDepth = 0;
+
+function hasFiles(e) {
+  return [...(e.dataTransfer?.types || [])].includes('Files');
+}
+window.addEventListener('dragenter', (e) => {
+  if (!S.active || !hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth++;
+  dropZone.classList.add('on');
+});
+window.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+window.addEventListener('dragleave', () => {
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (!dragDepth) dropZone.classList.remove('on');
+});
+window.addEventListener('drop', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  dropZone.classList.remove('on');
+  if (!S.active) { banner('Open a conversation first', 'bad', 3000); return; }
+  upload([...e.dataTransfer.files]);
+});
+
+document.addEventListener('paste', (e) => {
+  if (!S.active) return;
+  const files = [...(e.clipboardData?.files || [])];
+  if (files.length) { e.preventDefault(); upload(files); }
+});
+
+$('#btn-attach').onclick = () => $('#file-input').click();
+$('#file-input').onchange = (e) => {
+  upload([...e.target.files]);
+  e.target.value = '';
+};
+
+async function upload(files) {
+  if (!files.length) return;
+  for (const f of files) {
+    if (f.size > 64 * 1024 * 1024) { banner(f.name + ' is over 64MB, WhatsApp will not take it', 'bad', 5000); continue; }
+    banner('Sending ' + f.name, '', 0);
+    try {
+      const qs = new URLSearchParams({ chatId: S.active });
+      if (replyTo) qs.set('replyTo', replyTo.id);
+      const res = await fetch('/upload?' + qs.toString(), {
+        method: 'POST',
+        headers: { 'x-file-name': encodeURIComponent(f.name), 'x-file-type': f.type || '' },
+        body: f,
+      });
+      if (!res.ok) throw new Error(await res.text());
+      banner('Sent ' + f.name, 'ok', 1800);
+      cancelCompose();
+    } catch (err) {
+      banner('Could not send ' + f.name + ': ' + err.message, 'bad', 6000);
+    }
+  }
+}
+
+// ---- emoji picker ----------------------------------------
+
+const EMOJI = {
+  'Smileys': '😀 😃 😄 😁 😅 😂 🙂 🙃 😉 😊 😍 😘 😗 😚 😋 😜 🤪 🤨 🧐 🤓 😎 🥳 😏 😒 😔 😟 🙁 😣 😖 😫 😤 😡 🤬 🤯 😳 🥵 🥶 😱 😨 😰 😢 😭 😓 🤗 🤔 🤫 🤭 😐 😑 😶 🙄 😬 🤥 😴 🤤 😪 🤢 🤮 🤧 🥴 😵 🤠',
+  'Gestures': '👍 👎 👌 ✌️ 🤞 🤟 🤘 👈 👉 👆 👇 ☝️ ✋ 🤚 🖐️ 🖖 👋 🤙 💪 🙏 🤝 👏 🙌 👐 ✍️ 💅',
+  'Hearts': '❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝',
+  'Objects': '🔥 ⭐ 🌟 ✨ ⚡ 💧 🎉 🎊 🎁 📦 📱 💻 ⌨️ 🖥️ 🔌 💡 🔑 🔒 📌 📎 ✅ ❌ ❗ ❓ 💯 ⏰ 📅 📍',
+};
+
+const emojiBox = $('#emoji');
+function buildEmoji() {
+  emojiBox.innerHTML = '';
+  for (const [cat, list] of Object.entries(EMOJI)) {
+    emojiBox.appendChild(el('div', 'cat', cat));
+    const g = el('div', 'grid');
+    for (const e of list.split(' ')) {
+      const b = el('button', null, e);
+      b.onclick = () => {
+        const at = draft.selectionStart ?? draft.value.length;
+        draft.value = draft.value.slice(0, at) + e + draft.value.slice(at);
+        draft.focus();
+        draft.selectionStart = draft.selectionEnd = at + e.length;
+        syncComposer();
+      };
+      g.appendChild(b);
+    }
+    emojiBox.appendChild(g);
+  }
+}
+function hideEmoji() { emojiBox.classList.remove('on'); }
+$('#btn-emoji').onclick = (e) => {
+  e.stopPropagation();
+  if (!emojiBox.childElementCount) buildEmoji();
+  emojiBox.classList.toggle('on');
+};
+document.addEventListener('click', (e) => {
+  if (!emojiBox.contains(e.target) && e.target.id !== 'btn-emoji') hideEmoji();
+});
+
+// ---- jump to latest --------------------------------------
+
+const toBottom = $('#to-bottom');
+const messagesEl = $('#messages');
+messagesEl.addEventListener('scroll', () => {
+  const far = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight > 320;
+  toBottom.classList.toggle('on', far);
+});
+toBottom.onclick = () => { messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' }); };
+
+// ---- keyboard --------------------------------------------
+
+document.addEventListener('keydown', (e) => {
+  const typing = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('#q').focus(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); $('#q').focus(); return; }
+  if (e.key === 'Escape' && (replyTo || editing)) { cancelCompose(); return; }
+  if (e.key === '/' && !typing) { e.preventDefault(); $('#q').focus(); return; }
+  // Up arrow in an empty composer edits your last message, as in Telegram.
+  if (e.key === 'ArrowUp' && document.activeElement === draft && !draft.value && S.active) {
+    const mine = (S.messages.get(S.active) || []).filter((m) => m.fromMe && m.kind === 'text');
+    const last = mine[mine.length - 1];
+    if (last && Date.now() - last.ts < 15 * 60 * 1000) { e.preventDefault(); startEdit(last); }
+  }
 });

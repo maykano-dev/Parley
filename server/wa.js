@@ -41,7 +41,14 @@ export const CAPABILITIES = {
   media: true,
   reactions: true,
   replies: true,
-  edit: false,
+  forward: true,
+  deleteForEveryone: true,
+  edit: true,              // WhatsApp allows ~15 minutes
+  editWindowMs: 15 * 60 * 1000,
+  pin: true,
+  mute: true,
+  archive: true,
+  drafts: true,
   typing: true,
   readReceipts: true,
   maxAttachmentBytes: 64 * 1024 * 1024,
@@ -199,6 +206,21 @@ export class WhatsApp extends EventEmitter {
       }
     });
 
+    sock.ev.on('messages.reaction', (reactions) => {
+      for (const r of reactions) {
+        const chatId = r.key?.remoteJid;
+        const id = r.key?.id;
+        if (!chatId || !id) continue;
+        const existing = this.store.messages(chatId).find((m) => m.id === id);
+        if (!existing) continue;
+        const list = (existing.reactions || []).filter((x) => x.by !== (r.reaction?.senderTimestampMs ? 'them' : 'them'));
+        const text = r.reaction?.text || '';
+        const next = text ? list.concat([{ emoji: text, by: 'them' }]) : list;
+        const patched = this.store.updateMessage(chatId, id, { reactions: next });
+        if (patched) this.emit('message', patched);
+      }
+    });
+
     sock.ev.on('presence.update', ({ id, presences }) => {
       const first = presences && Object.values(presences)[0];
       if (!first) return;
@@ -217,16 +239,38 @@ export class WhatsApp extends EventEmitter {
   }
 
   async logout() {
+    this.stopping = true;                      // do not let the close handler reconnect mid-wipe
     try {
       await this.sock?.logout();
     } catch { /* socket may already be closed */ }
+    try {
+      this.sock?.end?.(undefined);
+    } catch { /* already gone */ }
+    this.sock = null;
     try {
       fs.rmSync(AUTH_DIR, { recursive: true, force: true });
     } catch { /* nothing to remove */ }
     this.store.reset();
     this.me = null;
+    this.qr = null;
+    this.pairingCode = null;
     this.raw.clear();
     this.setStatus('linking', { reason: 'unlinked' });
+    // Without this there is no socket left to produce a QR, so the link
+    // screen sits there forever waiting for a code that never comes.
+    this.stopping = false;
+    setTimeout(() => this.start().catch((e) => this.emit('error', e.message)), 400);
+  }
+
+  // Any client can ask for a fresh code if the screen has been sitting idle.
+  async relink() {
+    if (this.status === 'online') throw new Error('Already linked.');
+    if (this.sock) {
+      try { this.sock.end(undefined); } catch { /* ignore */ }
+      this.sock = null;
+    }
+    this.stopping = false;
+    await this.start();
   }
 
   // 8 character pairing code, typed into the phone. No OTP, no password:
@@ -346,7 +390,7 @@ export class WhatsApp extends EventEmitter {
         : null,
     };
 
-    if (msg.hasMedia) this.rememberRaw(m);
+    this.rememberRaw(m);
 
     const saved = this.store.addMessage(msg);
 
@@ -372,7 +416,7 @@ export class WhatsApp extends EventEmitter {
 
   rememberRaw(m) {
     this.raw.set(m.key.id, m);
-    if (this.raw.size > 600) {
+    if (this.raw.size > 2000) {
       const oldest = this.raw.keys().next().value;
       this.raw.delete(oldest);
     }
@@ -417,6 +461,104 @@ export class WhatsApp extends EventEmitter {
       this.emit('error', 'Could not load older messages: ' + e.message);
       return 0;
     }
+  }
+
+  raw_(id) {
+    const m = this.raw.get(id);
+    if (!m) throw new Error('That message is no longer cached on this device.');
+    return m;
+  }
+
+  async send(chatId, text, replyToId) {
+    if (!this.sock || this.status !== 'online') throw new Error('Not connected yet.');
+    const body = String(text || '').trim();
+    if (!body) throw new Error('Nothing to send.');
+    const opts = replyToId ? { quoted: this.raw_(replyToId) } : {};
+    const res = await this.sock.sendMessage(chatId, { text: body }, opts);
+    if (res) this.ingestMessage(res, { notify: false });
+    return res?.key?.id || null;
+  }
+
+  // One entry point for every attachment. The kind is decided from the mime
+  // type so the UI never has to care which Baileys field to fill.
+  async sendMedia(chatId, buffer, { mime = '', fileName = '', caption = '', replyToId = null, ptt = false, seconds = 0 } = {}) {
+    if (!this.sock || this.status !== 'online') throw new Error('Not connected yet.');
+    const opts = replyToId ? { quoted: this.raw_(replyToId) } : {};
+    let content;
+    if (ptt || /^audio\//.test(mime)) {
+      content = { audio: buffer, mimetype: ptt ? 'audio/ogg; codecs=opus' : (mime || 'audio/mpeg'), ptt: !!ptt };
+      if (seconds) content.seconds = Math.round(seconds);
+    } else if (/^image\/webp$/.test(mime)) {
+      content = { sticker: buffer };
+    } else if (/^image\//.test(mime)) {
+      content = { image: buffer, caption: caption || undefined, mimetype: mime };
+    } else if (/^video\//.test(mime)) {
+      content = { video: buffer, caption: caption || undefined, mimetype: mime };
+    } else {
+      content = { document: buffer, mimetype: mime || 'application/octet-stream', fileName: fileName || 'file' };
+      if (caption) content.caption = caption;
+    }
+    const res = await this.sock.sendMessage(chatId, content, opts);
+    if (res) this.ingestMessage(res, { notify: false });
+    return res?.key?.id || null;
+  }
+
+  async react(chatId, messageId, emoji) {
+    if (!this.sock || this.status !== 'online') throw new Error('Not connected yet.');
+    const key = this.raw_(messageId).key;
+    await this.sock.sendMessage(chatId, { react: { text: emoji || '', key } });
+    const patched = this.store.updateMessage(chatId, messageId, { myReaction: emoji || '' });
+    if (patched) this.emit('message', patched);
+  }
+
+  async edit(chatId, messageId, text) {
+    if (!this.sock || this.status !== 'online') throw new Error('Not connected yet.');
+    const m = this.raw_(messageId);
+    if (!m.key.fromMe) throw new Error('You can only edit your own messages.');
+    await this.sock.sendMessage(chatId, { text: String(text), edit: m.key });
+    const patched = this.store.updateMessage(chatId, messageId, { text: String(text), edited: true });
+    if (patched) this.emit('message', patched);
+  }
+
+  async remove(chatId, messageId, forEveryone = true) {
+    if (!this.sock || this.status !== 'online') throw new Error('Not connected yet.');
+    const key = this.raw_(messageId).key;
+    if (forEveryone) await this.sock.sendMessage(chatId, { delete: key });
+    const patched = this.store.updateMessage(chatId, messageId, {
+      kind: 'text', text: 'This message was deleted', deleted: true, hasMedia: false,
+    });
+    if (patched) this.emit('message', patched);
+  }
+
+  async forward(toChatId, messageId) {
+    if (!this.sock || this.status !== 'online') throw new Error('Not connected yet.');
+    const res = await this.sock.sendMessage(toChatId, { forward: this.raw_(messageId) });
+    if (res) this.ingestMessage(res, { notify: false });
+    return res?.key?.id || null;
+  }
+
+  async modify(chatId, what) {
+    if (!this.sock || this.status !== 'online') throw new Error('Not connected yet.');
+    const recent = this.store.messages(chatId).slice(-1).map((m) => ({
+      key: { remoteJid: chatId, id: m.id, fromMe: !!m.fromMe },
+      messageTimestamp: Math.floor(m.ts / 1000),
+    }));
+    const patch = {};
+    if ('archive' in what) Object.assign(patch, { archive: !!what.archive, lastMessages: recent });
+    if ('pin' in what) patch.pin = !!what.pin;
+    if ('mute' in what) patch.mute = what.mute ? 8 * 60 * 60 * 1000 : null;
+    if ('unread' in what) Object.assign(patch, { markRead: !what.unread, lastMessages: recent });
+    try {
+      await this.sock.chatModify(patch, chatId);
+    } catch (e) {
+      throw new Error('WhatsApp refused that change: ' + e.message);
+    }
+    const next = { id: chatId };
+    if ('archive' in what) next.archived = !!what.archive;
+    if ('pin' in what) next.pinned = !!what.pin;
+    if ('mute' in what) next.muted = !!what.mute;
+    if ('unread' in what) next.unread = what.unread ? 1 : 0;
+    this.emit('chat', this.store.upsertChat(next));
   }
 
   async markRead(chatId) {
