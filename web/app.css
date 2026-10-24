@@ -1061,3 +1061,175 @@ body.in-vault #vault-view { display: flex; }
 .tabs button[aria-pressed="true"] { background: var(--accent); color: #fff; }
 .member { display: flex; align-items: center; gap: 11px; padding: 9px 0; border-top: 1px solid var(--sep); }
 .member:first-child { border-top: 0; }
+
+/* link + accounts are views inside the window, never a takeover */
+#link-view, #accounts-view { flex: 1; min-width: 0; display: none; flex-direction: column; overflow: auto; }
+body.in-link #list-col, body.in-link #thread-col, body.in-link #vault-view, body.in-link #accounts-view { display: none; }
+body.in-link #link-view { display: flex; }
+body.in-accounts #list-col, body.in-accounts #thread-col, body.in-accounts #vault-view, body.in-accounts #link-view { display: none; }
+body.in-accounts #accounts-view { display: flex; }
+body.in-vault #link-view, body.in-vault #accounts-view { display: none; }
+
+#link-view .link-grid {
+  position: static;
+  inset: auto;
+  flex: 1;
+  min-height: 0;
+  border-radius: 0;
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.acct {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  border: 1px solid var(--sep);
+  margin-bottom: 12px;
+}
+.acct .mark { width: 44px; height: 44px; border-radius: 13px; }
+.acct .mark svg { width: 23px; height: 23px; }
+.acct .cell { flex: 1; min-width: 0; }
+.acct .nm { font-size: 15px; font-weight: 600; letter-spacing: -.012em; }
+.acct .st { font-size: 12.5px; color: var(--ink-3); margin-top: 3px; }
+.acct .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; vertical-align: 1px; }
+
+/* ---- connect flow ---- */
+.connect-head { display: flex; align-items: center; gap: 13px; margin-bottom: 8px; }
+.connect-head .mark { width: 46px; height: 46px; border-radius: 14px; }
+.connect-head .mark svg { width: 24px; height: 24px; }
+.connect-head .t { font-size: 18px; font-weight: 600; letter-spacing: -.02em; }
+.connect-head .s { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+
+.safe {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  border-radius: 100px;
+  background: rgba(48, 209, 88, .12);
+  border: 1px solid rgba(48, 209, 88, .3);
+  color: #30D158;
+  font-size: 12px;
+  font-weight: 550;
+  margin-bottom: 20px;
+}
+.safe svg { width: 14px; height: 14px; }
+
+.steps { display: flex; align-items: center; gap: 0; margin-bottom: 22px; }
+.steps .s { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-3); }
+.steps .s .n {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 11px; font-weight: 650;
+  background: var(--panel);
+  border: 1px solid var(--sep);
+  color: var(--ink-3);
+}
+.steps .s.on { color: var(--ink); font-weight: 550; }
+.steps .s.on .n { background: var(--accent); border-color: transparent; color: #fff; }
+.steps .s.done .n { background: rgba(48,209,88,.16); border-color: rgba(48,209,88,.4); color: #30D158; }
+.steps .bar { flex: 1; height: 1px; background: var(--sep); margin: 0 12px; }
+
+.field-lg { margin-bottom: 6px; }
+.field-lg label { display: block; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 9px; }
+.field-lg input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--well);
+  color: var(--ink);
+  font-size: 16px;
+  outline: none;
+  transition: border-color .2s ease;
+}
+.field-lg input:focus { border-color: var(--accent); }
+.field-lg .help { font-size: 12px; color: var(--ink-3); margin-top: 9px; line-height: 1.5; }
+.btn-lg { width: 100%; justify-content: center; display: flex; padding: 13px 20px; font-size: 14px; border-radius: 14px; margin-top: 18px; }
+.link-row { display: flex; justify-content: center; margin-top: 14px; }
+.link-row button { border: 0; background: transparent; color: var(--ink-3); font-size: 12.5px; text-decoration: underline; text-underline-offset: 3px; }
+.link-row button:hover { color: var(--ink); }
+
+/* a connect sheet is a form, not a page: keep it narrow */
+.sheet.narrow { width: min(460px, 100%); }
+.sheet.narrow .sheet-head { padding: 18px 22px; }
+.sheet.narrow .sheet-body { padding: 20px 22px 24px; }
+
+/* ---- country picker ---- */
+.phone-field { display: flex; gap: 8px; }
+.cc {
+  position: relative;
+  flex: none;
+}
+.cc-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 100%;
+  padding: 0 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--well);
+  color: var(--ink);
+  font-size: 15px;
+  white-space: nowrap;
+}
+.cc-btn:hover { border-color: var(--line-strong, var(--accent)); }
+.cc-btn .fl { font-size: 18px; line-height: 1; }
+.cc-btn .ch { width: 12px; height: 12px; opacity: .5; }
+.phone-field input { flex: 1; min-width: 0; }
+
+.cc-pop {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 320px;
+  max-height: 300px;
+  display: none;
+  flex-direction: column;
+  border-radius: 14px;
+  /* opaque on purpose: a translucent list over body copy is unreadable */
+  background: color-mix(in srgb, var(--bg) 97%, var(--ink));
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 60px -18px rgba(0,0,0,.85);
+  overflow: hidden;
+}
+.cc-pop.on { display: flex; }
+.cc-search { padding: 8px; border-bottom: 1px solid var(--sep); }
+.cc-search input {
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--sep);
+  background: var(--well);
+  color: var(--ink);
+  font-size: 13.5px;
+  outline: none;
+}
+.cc-list { overflow: auto; padding: 5px; }
+.cc-list button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13.5px;
+  text-align: left;
+}
+.cc-list button:hover, .cc-list button.active { background: var(--hover); }
+.cc-list button .fl { font-size: 17px; line-height: 1; flex: none; }
+.cc-list button .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cc-list button .dl { color: var(--ink-3); font-variant-numeric: tabular-nums; flex: none; }
+.cc-empty { padding: 18px 12px; text-align: center; font-size: 12.5px; color: var(--ink-3); }

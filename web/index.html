@@ -28,6 +28,9 @@
 
     <div style="flex:1"></div>
 
+    <button class="icon-btn" id="btn-accounts" aria-label="Accounts" title="Accounts">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>
+    </button>
     <button class="icon-btn" id="btn-vault" aria-label="Media vault" title="Vault">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="12" cy="12" r="3"/><path d="M12 7.5V9M12 15v1.5"/></svg>
     </button>
@@ -65,6 +68,93 @@
 
     <div id="chats" class="scroll"></div>
   </section>
+
+  <section id="accounts-view" aria-label="Accounts">
+    <div class="vault-head">
+      <div class="row1">
+        <div style="flex:1">
+          <h1>Accounts</h1>
+          <p class="sub">Connect a network and its conversations join the one inbox</p>
+        </div>
+      </div>
+    </div>
+    <div class="vault-body scroll"><div id="accounts-body" style="max-width:720px"></div></div>
+  </section>
+
+<section id="link-view" aria-label="Link WhatsApp">
+  <div class="link-grid">
+    <div class="link-left">
+      <div style="display:flex;align-items:center;gap:11px;margin-bottom:34px">
+        <span class="mark" style="width:34px;height:34px;border-radius:11px;background:linear-gradient(145deg,#2DE071,#128C4A);box-shadow:0 6px 18px -6px rgba(37,211,102,.6)">
+          <svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+        </span>
+        <span style="font-size:14.5px;font-weight:600;letter-spacing:-.012em">Add WhatsApp</span>
+        <span style="flex:1"></span>
+        <span style="font-size:11.5px;font-weight:500;color:var(--ink-3)">Step 1 of 2</span>
+      </div>
+
+      <h1>Link this app<br>as a companion.</h1>
+      <p class="sub">Your phone stays the primary device. This app becomes one of its linked devices, exactly like WhatsApp Web, holding its own keys.</p>
+
+      <div id="link-steps"></div>
+
+      <div class="spacer"></div>
+
+      <div class="card" style="margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#30D158" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><rect x="4" y="10" width="16" height="10" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+          <span style="font-size:12.5px;font-weight:600">No password, ever</span>
+        </div>
+        <div style="font-size:12px;line-height:1.55;color:var(--ink-2)">We never ask for your WhatsApp credentials. Authorisation happens entirely on your phone, and you can unlink this device from there at any moment.</div>
+      </div>
+
+      <div class="card" style="margin-bottom:0">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:9px">
+          <span style="font-size:12.5px;font-weight:600">Linked devices</span>
+          <span style="flex:1"></span>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--ink-2)">up to 4</span>
+        </div>
+        <div class="slots"><i class="used"></i><i></i><i></i><i></i></div>
+      </div>
+    </div>
+
+    <div class="link-right">
+      <div class="seg" style="width:auto;margin-bottom:30px" id="link-modes">
+        <button data-mode="qr" aria-pressed="true" style="padding:9px 20px;flex:none">Scan a QR code</button>
+        <button data-mode="code" aria-pressed="false" style="padding:9px 20px;flex:none">Use an 8 character code</button>
+      </div>
+
+      <div id="link-qr">
+        <div class="qr-card">
+          <img id="qr-img" alt="QR code to link this device" width="232" height="232">
+          <span class="sweepline" aria-hidden="true"></span>
+          <span class="logo" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+          </span>
+        </div>
+        <p style="margin:24px 0 0;text-align:center;max-width:40ch;color:var(--ink-2);line-height:1.6">Open WhatsApp on your phone, go to <strong>Linked devices</strong>, and point the camera here.</p>
+        <div class="waiting" style="justify-content:center"><span class="live"></span><span id="qr-wait">Waiting for your phone</span></div>
+        <button class="btn" id="btn-newcode" style="margin-top:14px">Get a new code</button>
+      </div>
+
+      <div id="link-code" style="display:none;flex-direction:column;align-items:center">
+        <div class="code-boxes" id="code-boxes"></div>
+        <p style="margin:26px 0 0;text-align:center;max-width:44ch;color:var(--ink-2);line-height:1.6">On your phone: <strong>Linked devices, Link a device, then Link with phone number instead</strong>. Type this code there.</p>
+        <div class="phone-row">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="width:16px;height:16px;color:var(--ink-3)"><rect x="6" y="2.5" width="12" height="19" rx="3"/><path d="M11 18.5h2"/></svg>
+          <span id="wa-phone-slot"></span>
+          <button class="btn primary" id="btn-pair">Get code</button>
+        </div>
+        <div class="waiting"><span class="live"></span><span id="code-wait">Enter your number to request a code</span></div>
+      </div>
+
+      <div class="note" style="margin-top:38px;max-width:500px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v5M12 17.5h.01"/><path d="M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+        <span>WhatsApp allows four linked devices and treats unofficial clients as a terms violation. Accounts have been restricted for it. Link a secondary number first if that matters to you.</span>
+      </div>
+    </div>
+  </div>
+</section>
 
   <section id="vault-view" aria-label="Media vault">
     <div class="vault-head">
@@ -185,83 +275,6 @@
       </button>
     </div>
     <div class="sheet-body" id="sheet-body"></div>
-  </div>
-</div>
-
-<!-- ============ LINKING ============ -->
-<div id="link-screen">
-  <div class="link-grid">
-    <div class="link-left">
-      <div style="display:flex;align-items:center;gap:11px;margin-bottom:34px">
-        <span class="mark" style="width:34px;height:34px;border-radius:11px;background:linear-gradient(145deg,#2DE071,#128C4A);box-shadow:0 6px 18px -6px rgba(37,211,102,.6)">
-          <svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
-        </span>
-        <span style="font-size:14.5px;font-weight:600;letter-spacing:-.012em">Add WhatsApp</span>
-        <span style="flex:1"></span>
-        <span style="font-size:11.5px;font-weight:500;color:var(--ink-3)">Step 1 of 2</span>
-      </div>
-
-      <h1>Link this app<br>as a companion.</h1>
-      <p class="sub">Your phone stays the primary device. This app becomes one of its linked devices, exactly like WhatsApp Web, holding its own keys.</p>
-
-      <div id="link-steps"></div>
-
-      <div class="spacer"></div>
-
-      <div class="card" style="margin-bottom:12px">
-        <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#30D158" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><rect x="4" y="10" width="16" height="10" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-          <span style="font-size:12.5px;font-weight:600">No password, ever</span>
-        </div>
-        <div style="font-size:12px;line-height:1.55;color:var(--ink-2)">We never ask for your WhatsApp credentials. Authorisation happens entirely on your phone, and you can unlink this device from there at any moment.</div>
-      </div>
-
-      <div class="card" style="margin-bottom:0">
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:9px">
-          <span style="font-size:12.5px;font-weight:600">Linked devices</span>
-          <span style="flex:1"></span>
-          <span style="font-family:var(--mono);font-size:12px;color:var(--ink-2)">up to 4</span>
-        </div>
-        <div class="slots"><i class="used"></i><i></i><i></i><i></i></div>
-      </div>
-    </div>
-
-    <div class="link-right">
-      <div class="seg" style="width:auto;margin-bottom:30px" id="link-modes">
-        <button data-mode="qr" aria-pressed="true" style="padding:9px 20px;flex:none">Scan a QR code</button>
-        <button data-mode="code" aria-pressed="false" style="padding:9px 20px;flex:none">Use an 8 character code</button>
-      </div>
-
-      <div id="link-qr">
-        <div class="qr-card">
-          <img id="qr-img" alt="QR code to link this device" width="232" height="232">
-          <span class="sweepline" aria-hidden="true"></span>
-          <span class="logo" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
-          </span>
-        </div>
-        <p style="margin:24px 0 0;text-align:center;max-width:40ch;color:var(--ink-2);line-height:1.6">Open WhatsApp on your phone, go to <strong>Linked devices</strong>, and point the camera here.</p>
-        <div class="waiting" style="justify-content:center"><span class="live"></span><span id="qr-wait">Waiting for your phone</span></div>
-        <button class="btn" id="btn-newcode" style="margin-top:14px">Get a new code</button>
-      </div>
-
-      <div id="link-code" style="display:none;flex-direction:column;align-items:center">
-        <div class="code-boxes" id="code-boxes"></div>
-        <p style="margin:26px 0 0;text-align:center;max-width:44ch;color:var(--ink-2);line-height:1.6">On your phone: <strong>Linked devices, Link a device, then Link with phone number instead</strong>. Type this code there.</p>
-        <div class="phone-row">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="width:16px;height:16px;color:var(--ink-3)"><rect x="6" y="2.5" width="12" height="19" rx="3"/><path d="M11 18.5h2"/></svg>
-          <label class="sr" for="phone">Your WhatsApp number, digits only, with country code</label>
-          <input id="phone" inputmode="numeric" autocomplete="tel" placeholder="233241234567">
-          <button class="btn primary" id="btn-pair">Get code</button>
-        </div>
-        <div class="waiting"><span class="live"></span><span id="code-wait">Enter your number to request a code</span></div>
-      </div>
-
-      <div class="note" style="margin-top:38px;max-width:500px">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v5M12 17.5h.01"/><path d="M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
-        <span>WhatsApp allows four linked devices and treats unofficial clients as a terms violation. Accounts have been restricted for it. Link a secondary number first if that matters to you.</span>
-      </div>
-    </div>
   </div>
 </div>
 

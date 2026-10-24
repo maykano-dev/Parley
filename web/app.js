@@ -1,3 +1,5 @@
+import { COUNTRIES, flagOf, guessCountry } from '/countries.js';
+
 // Client. Talks to the local bridge over a WebSocket, renders the unified
 // inbox, and owns all appearance state. Knows nothing about Baileys: it only
 // ever sees the app's own Chat/Message shape.
@@ -16,8 +18,8 @@ const NETWORKS = {
     path: 'M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z',
   },
   telegram: { label: 'Telegram', colour: '#2AABEE', live: false, path: 'M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z' },
-  discord:  { label: 'Discord',  colour: '#5865F2', live: false, path: 'M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.0766.0766 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z' },
   slack:    { label: 'Slack',    colour: '#E01E5A', live: false, path: 'M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z' },
+  matrix:   { label: 'Matrix',   colour: '#000000', live: false, path: 'M.632.55v22.9H2.28V24H0V0h2.28v.55zm7.043 7.26v1.157h.033c.309-.443.683-.784 1.117-1.024.433-.245.936-.365 1.5-.365.54 0 1.033.107 1.481.314.448.208.785.582 1.02 1.108.254-.374.6-.706 1.034-.992.434-.287.95-.43 1.546-.43.453 0 .872.056 1.26.167.388.11.716.286.993.53.276.245.489.559.646.951.152.392.23.863.23 1.417v5.728h-2.349V11.52c0-.286-.01-.559-.032-.812a1.755 1.755 0 0 0-.18-.66 1.106 1.106 0 0 0-.438-.448c-.194-.11-.457-.166-.785-.166-.332 0-.6.064-.803.189a1.38 1.38 0 0 0-.48.499 1.946 1.946 0 0 0-.231.696 5.56 5.56 0 0 0-.06.785v4.768h-2.35v-4.8c0-.254-.004-.503-.018-.752a2.074 2.074 0 0 0-.143-.688 1.052 1.052 0 0 0-.415-.503c-.194-.125-.476-.19-.854-.19-.111 0-.259.024-.439.074-.18.051-.36.143-.53.282-.171.138-.319.337-.439.595-.12.259-.18.6-.18 1.02v4.966H5.46V7.81zm15.693 15.64V.55H21.72V0H24v24h-2.28v-.55z' },
   signal:   { label: 'Signal',   colour: '#3A76F0', live: false, path: 'M12 0a12 12 0 1 0 0 24 12 12 0 0 0 0-24zm0 2.4a9.6 9.6 0 1 1 0 19.2 9.6 9.6 0 0 1 0-19.2z' },
 };
 
@@ -64,6 +66,9 @@ const S = {
   results: [],
   presence: new Map(),
   typingTimer: null,
+  netFilter: null,
+  pinnedAccounts: false,
+  tg: { status: 'offline', linked: false, configured: false, hint: null, me: null },
   settings: load('settings', {
     theme: 'dark', accent: '#0A84FF', glass: 40, radius: 18,
     density: 'comfortable', wall: 'Nebula',
@@ -250,13 +255,97 @@ function banner(text, kind, ms) {
 
 function paintStatus() {
   const linking = !S.linked || S.status === 'linking';
-  $('#link-screen').classList.toggle('on', linking);
-  $('#window').style.display = linking ? 'none' : 'flex';
+  NETWORKS.whatsapp.live = S.status === 'online';
+  renderRail();
+  renderLinkSteps();
+  renderAccounts();
 
-  if (linking) { renderLinkSteps(); return; }
-  if (S.status === 'online') banner('Connected to WhatsApp', 'ok', 1800);
-  else if (S.status === 'connecting') banner('Reconnecting', '', 0);
-  else banner('Offline', 'bad', 0);
+  // Land on Accounts when nothing at all is connected, so the app is never
+  // held hostage by one network's login screen.
+  const anyLive = S.status === 'online' || S.tg.status === 'online';
+  if (!anyLive && !document.body.classList.contains('in-link') && !document.body.classList.contains('in-vault')) {
+    showAccounts();
+  }
+  if (anyLive && document.body.classList.contains('in-accounts') && !S.pinnedAccounts) {
+    document.body.classList.remove('in-accounts');
+  }
+
+  if (S.status === 'online') banner('WhatsApp connected', 'ok', 1800);
+  else if (S.status === 'connecting') banner('WhatsApp reconnecting', '', 0);
+  else if (linking) banner('WhatsApp is not linked', '', 0);
+}
+
+function showView(name) {
+  document.body.classList.remove('in-link', 'in-vault', 'in-accounts');
+  if (name) document.body.classList.add('in-' + name);
+  S.pinnedAccounts = name === 'accounts';
+}
+function showAccounts() { showView('accounts'); renderAccounts(); }
+function showLink() { showView('link'); renderLinkSteps(); }
+
+function renderAccounts() {
+  const host = $('#accounts-body');
+  if (!host) return;
+  host.innerHTML = '';
+
+  const rows = [
+    {
+      id: 'whatsapp',
+      live: S.status === 'online',
+      status: S.status === 'online' ? 'Connected' + (S.me ? ' as ' + (S.me.name || S.me.id.split('@')[0]) : '')
+        : S.status === 'connecting' ? 'Reconnecting'
+        : 'Not linked',
+      note: 'Companion device, like WhatsApp Web. Unofficial client, so there is some account risk.',
+      action: S.status === 'online' ? ['Manage', openAbout] : ['Link a device', showLink],
+    },
+    {
+      id: 'telegram',
+      live: S.tg.status === 'online',
+      status: S.tg.status === 'online' ? 'Connected' + (S.tg.me ? ' as ' + S.tg.me.name : '')
+        : S.tg.configured ? (S.tg.status === 'offline' ? 'Not connected' : 'Signing in')
+        : 'Needs an api_id and api_hash',
+      note: 'Built on TDLib, published by Telegram for third party clients. No ban risk.',
+      action: [S.tg.status === 'online' ? 'Manage' : 'Connect', openTelegram],
+    },
+  ];
+
+  for (const r of rows) {
+    const net = NETWORKS[r.id];
+    const row = el('div', 'acct');
+    const mark = el('span', 'mark');
+    mark.style.background = net.colour;
+    mark.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="' + net.path + '"/></svg>';
+    const cell = el('div', 'cell');
+    cell.appendChild(el('div', 'nm', net.label));
+    const st = el('div', 'st');
+    const dot = el('span', 'dot');
+    dot.style.background = r.live ? '#30D158' : 'var(--ink-3)';
+    st.append(dot, document.createTextNode(r.status));
+    cell.appendChild(st);
+    cell.appendChild(el('div', 'st', r.note));
+    const btn = el('button', r.live ? 'btn' : 'btn primary', r.action[0]);
+    btn.onclick = r.action[1];
+    row.append(mark, cell, btn);
+    host.appendChild(row);
+  }
+
+  for (const id of ['signal', 'matrix', 'slack']) {
+    const net = NETWORKS[id];
+    const row = el('div', 'acct');
+    row.style.opacity = '.55';
+    const mark = el('span', 'mark');
+    mark.style.background = net.colour;
+    mark.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="' + net.path + '"/></svg>';
+    const cell = el('div', 'cell');
+    cell.appendChild(el('div', 'nm', net.label));
+    cell.appendChild(el('div', 'st', {
+      signal: 'Links as a legitimate secondary device through signal-cli. Signal is open source and does not ban for it.',
+      matrix: 'An open protocol with no gatekeeper. Nothing to violate, nothing to be banned from.',
+      slack: 'Official API. Safe, but needs a workspace app and an admin to approve it.',
+    }[id]));
+    row.append(mark, cell, el('span', 'tag alt', 'not built'));
+    host.appendChild(row);
+  }
 }
 
 function renderMe() {
@@ -300,7 +389,8 @@ function renderRail() {
     }
     b.onclick = () => {
       if (id === 'telegram') { openTelegram(); return; }
-      if (!net.live) { openAbout(); return; }
+      if (id === 'whatsapp' && !net.live) { showLink(); return; }
+      if (!net.live) { showAccounts(); return; }
       closeVault();
       S.view = 'inbox';
       S.netFilter = S.netFilter === id ? null : id;
@@ -412,6 +502,7 @@ function emptyNote(title, body) {
 // ---------------- thread ----------------
 
 function openChat(id) {
+  showView(null);
   S.active = id;
   document.body.classList.add('in-thread');
   $('#thread-empty').style.display = 'none';
@@ -774,7 +865,8 @@ $('#lightbox').onclick = (e) => { if (e.target.id === 'lightbox') $('#lightbox')
 
 // ---------------- sheets ----------------
 
-function openSheet(title, build) {
+function openSheet(title, build, opts = {}) {
+  document.querySelector('.sheet').classList.toggle('narrow', !!opts.narrow);
   $('#sheet-title').textContent = title;
   const body = $('#sheet-body');
   body.innerHTML = '';
@@ -979,7 +1071,8 @@ function openAbout() {
   });
 }
 $('#btn-about').onclick = openAbout;
-$('#btn-vault').onclick = () => (document.body.classList.contains('in-vault') ? closeVault() : openVault());
+$('#btn-vault').onclick = () => (document.body.classList.contains('in-vault') ? showView(null) : (showView('vault'), openVault()));
+$('#btn-accounts').onclick = () => (document.body.classList.contains('in-accounts') ? showView(null) : showAccounts());
 
 // ---------------- linking ----------------
 
@@ -1037,9 +1130,13 @@ $('#btn-newcode').onclick = () => {
   sendWS({ t: 'connect' });
 };
 
+const waPhone = phoneField(() => $('#btn-pair').click());
+$('#wa-phone-slot').replaceWith(waPhone.el);
+waPhone.el.style.flex = '1';
+
 $('#btn-pair').onclick = () => {
-  const phone = $('#phone').value.replace(/[^0-9]/g, '');
-  if (phone.length < 8) { banner('Enter the full number with country code, digits only', 'bad', 4000); return; }
+  const phone = waPhone.value();
+  if (phone.length < 8) { banner('Pick your country and enter the rest of the number', 'bad', 4000); return; }
   $('#code-wait').textContent = 'Requesting a code';
   sendWS({ t: 'pair', phone });
 };
@@ -1050,6 +1147,7 @@ applySettings();
 syncComposer();
 renderRail();
 renderLinkSteps();
+renderAccounts();
 connect();
 
 window.addEventListener('resize', () => {
@@ -1370,11 +1468,11 @@ const FILTERS = [
 ];
 
 function openVault() {
-  document.body.classList.add('in-vault');
+  showView('vault');
   if (!V.loaded) sendWS({ t: 'vault' });
   renderVault();
 }
-function closeVault() { document.body.classList.remove('in-vault'); }
+function closeVault() { showView(null); }
 $('#vault-close').onclick = closeVault;
 $('#vault-q').addEventListener('input', (e) => { V.q = e.target.value.trim().toLowerCase(); renderVault(); });
 
@@ -1540,8 +1638,6 @@ function bytes(n) {
 // Telegram: connect flow
 // ==========================================================
 
-S.tg = { status: 'offline', linked: false, configured: false, hint: null, me: null };
-
 function tgLive() { return S.tg.status === 'online'; }
 
 function openTelegram() {
@@ -1586,42 +1682,118 @@ function openTelegram() {
 
   openSheet('Connect Telegram', (host) => {
     const step = st.status;
-    const intro = el('p', null, st.hint || 'Telegram officially supports third party clients, so this connection carries no account risk.');
-    intro.style.cssText = 'margin:0 0 18px;color:var(--ink-2);line-height:1.6';
-    host.appendChild(intro);
+    const net = NETWORKS.telegram;
 
-    const box = card_(host, step === 'needCode' ? 'Login code' : step === 'needPassword' ? 'Two step password' : 'Phone number');
-    const input = el('input');
-    input.className = 'tg-input';
-    input.style.cssText = 'width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--well);color:var(--ink);font-size:15px;outline:none';
-    if (step === 'needCode') { input.inputMode = 'numeric'; input.placeholder = '12345'; input.autocomplete = 'one-time-code'; }
-    else if (step === 'needPassword') { input.type = 'password'; input.placeholder = 'Your password'; }
-    else { input.inputMode = 'tel'; input.placeholder = '+233241234567'; input.autocomplete = 'tel'; }
-    box.appendChild(input);
+    const head = el('div', 'connect-head');
+    const mark = el('span', 'mark');
+    mark.style.background = net.colour;
+    mark.style.color = '#fff';
+    mark.style.display = 'grid';
+    mark.style.placeItems = 'center';
+    mark.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="' + net.path + '"/></svg>';
+    const ht = el('div');
+    ht.appendChild(el('div', 't', 'Telegram'));
+    ht.appendChild(el('div', 's', 'Signs in on this device, like any other Telegram client'));
+    head.append(mark, ht);
+    host.appendChild(head);
 
-    const go = el('button', 'btn primary', step === 'needCode' ? 'Verify' : step === 'needPassword' ? 'Unlock' : 'Send code');
-    go.style.cssText = 'margin-top:14px;width:100%;justify-content:center;display:flex';
-    const submit = () => {
-      const v = input.value.trim();
-      if (!v) return;
-      go.textContent = 'Working';
-      if (step === 'needCode') sendWS({ t: 'tgCode', code: v });
-      else if (step === 'needPassword') sendWS({ t: 'tgPassword', password: v });
-      else sendWS({ t: 'tgPhone', phone: v });
+    const safe = el('div', 'safe');
+    safe.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.5 3v5.5c0 4.3-3 8.3-7.5 9.5-4.5-1.2-7.5-5.2-7.5-9.5V6z"/><path d="M9 12l2 2 4-4"/></svg>';
+    safe.append(document.createTextNode('Officially supported. No account risk.'));
+    host.appendChild(safe);
+
+    const order = ['needPhone', 'needCode', 'needPassword'];
+    const at = Math.max(0, order.indexOf(step));
+    const steps = el('div', 'steps');
+    ['Phone', 'Code', 'Password'].forEach((label, i) => {
+      if (i) steps.appendChild(el('span', 'bar'));
+      const sEl = el('span', 's' + (i === at ? ' on' : i < at ? ' done' : ''));
+      sEl.appendChild(el('span', 'n', i < at ? '✓' : String(i + 1)));
+      sEl.appendChild(document.createTextNode(label));
+      steps.appendChild(sEl);
+    });
+    host.appendChild(steps);
+
+    const CFG = {
+      needCode: {
+        label: 'Login code',
+        placeholder: '1 2 3 4 5',
+        help: 'Telegram sent a code to your other signed in devices, not by SMS. Check the Telegram app on your phone.',
+        cta: 'Verify',
+        send: (v) => sendWS({ t: 'tgCode', code: v }),
+        attrs: (i) => { i.inputMode = 'numeric'; i.autocomplete = 'one-time-code'; },
+      },
+      needPassword: {
+        label: 'Two step password',
+        placeholder: 'Your password',
+        help: st.hint && st.hint.includes('Hint') ? st.hint : 'This is the password you set for two step verification, not your login code.',
+        cta: 'Unlock',
+        send: (v) => sendWS({ t: 'tgPassword', password: v }),
+        attrs: (i) => { i.type = 'password'; i.autocomplete = 'current-password'; },
+      },
+      default: {
+        label: 'Phone number',
+        placeholder: '24 123 4567',
+        help: 'Pick your country, then the rest of the number. Use the number your Telegram account is registered to.',
+        cta: 'Send me a code',
+        send: (v) => sendWS({ t: 'tgPhone', phone: v }),
+        attrs: (i) => { i.inputMode = 'tel'; i.autocomplete = 'tel'; },
+      },
     };
-    go.onclick = submit;
-    input.onkeydown = (e) => { if (e.key === 'Enter') submit(); };
-    box.appendChild(go);
+    const cfg = CFG[step] || CFG.default;
 
-    if (step === 'offline' || step === 'connecting') {
-      const start = el('button', 'btn', 'Start the connection');
-      start.style.cssText = 'margin-top:10px;width:100%;justify-content:center;display:flex';
-      start.onclick = () => { sendWS({ t: 'tgStart' }); start.textContent = 'Starting'; };
-      box.appendChild(start);
+    const isPhone = !(step === 'needCode' || step === 'needPassword');
+    const field = el('div', 'field-lg');
+    const lab = el('label');
+    lab.textContent = cfg.label;
+    field.appendChild(lab);
+
+    let read;
+    let focusIt;
+    if (isPhone) {
+      const pf = phoneField(() => submit());
+      field.appendChild(pf.el);
+      read = pf.value;
+      focusIt = pf.focus;
+    } else {
+      const input = el('input');
+      input.id = 'tg-input';
+      input.placeholder = cfg.placeholder;
+      cfg.attrs(input);
+      input.onkeydown = (e) => { if (e.key === 'Enter') submit(); };
+      field.appendChild(input);
+      read = () => input.value.trim();
+      focusIt = () => input.focus();
+    }
+    field.appendChild(el('div', 'help', cfg.help));
+    host.appendChild(field);
+
+    const go = el('button', 'btn primary btn-lg', cfg.cta);
+    function submit() {
+      const v = read();
+      if (!v) { focusIt(); return; }
+      go.disabled = true;
+      go.textContent = 'Working';
+      cfg.send(v);
+    }
+    go.onclick = submit;
+    host.appendChild(go);
+
+    if (step !== 'needPhone' && step !== 'offline') {
+      const row = el('div', 'link-row');
+      const again = el('button', null, 'Start over with a different number');
+      again.onclick = () => { sendWS({ t: 'tgLogout' }); setTimeout(() => sendWS({ t: 'tgStart' }), 600); };
+      row.appendChild(again);
+      host.appendChild(row);
     }
 
-    setTimeout(() => input.focus(), 120);
-  });
+    // The connection starts itself. Making the user press a second button to
+    // "start" before the one that actually does something was the confusing
+    // part of the old screen.
+    if (step === 'offline') sendWS({ t: 'tgStart' });
+
+    setTimeout(focusIt, 140);
+  }, { narrow: true });
 }
 
 function card_(host, label) {
@@ -1637,4 +1809,126 @@ function kv(host, k, v) {
   row.append(left, el('div', 'v', v));
   host.appendChild(row);
   return row;
+}
+
+// ==========================================================
+// Country picker
+// ==========================================================
+
+
+// Returns { el, value() } where value() is the full E.164 number.
+function phoneField(onSubmit) {
+  const saved = (() => { try { return localStorage.getItem('cc'); } catch { return null; } })();
+  let iso = saved || guessCountry() || 'GH';
+  let row = COUNTRIES.find((c) => c[0] === iso) || COUNTRIES.find((c) => c[0] === 'GH');
+
+  const wrap = el('div', 'phone-field');
+  const cc = el('div', 'cc');
+  const btn = el('button', 'cc-btn');
+  btn.type = 'button';
+  btn.setAttribute('aria-haspopup', 'listbox');
+  btn.setAttribute('aria-label', 'Country calling code');
+
+  const paint = () => {
+    btn.innerHTML = '';
+    btn.append(el('span', 'fl', flagOf(row[0])), el('span', null, '+' + row[2]));
+    const ch = el('span', 'ch');
+    ch.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+    btn.appendChild(ch);
+  };
+  paint();
+
+  const pop = el('div', 'cc-pop');
+  const sWrap = el('div', 'cc-search');
+  const search = el('input');
+  search.placeholder = 'Search 239 countries';
+  search.setAttribute('aria-label', 'Search countries');
+  sWrap.appendChild(search);
+  const list = el('div', 'cc-list');
+  pop.append(sWrap, list);
+
+  let cursor = 0;
+  let shown = COUNTRIES;
+
+  function fill(q = '') {
+    const term = q.trim().toLowerCase();
+    shown = !term ? COUNTRIES : COUNTRIES.filter(([code, name, dial]) =>
+      name.toLowerCase().includes(term) ||
+      code.toLowerCase() === term ||
+      dial.startsWith(term.replace(/^\+/, '')));
+    cursor = 0;
+    list.innerHTML = '';
+    if (!shown.length) {
+      list.appendChild(el('div', 'cc-empty', 'No country matches that'));
+      return;
+    }
+    shown.slice(0, 260).forEach((c, i) => {
+      const b = el('button');
+      b.type = 'button';
+      b.append(el('span', 'fl', flagOf(c[0])), el('span', 'nm', c[1]), el('span', 'dl', '+' + c[2]));
+      if (i === 0) b.classList.add('active');
+      b.onclick = () => choose(c);
+      list.appendChild(b);
+    });
+  }
+
+  function choose(c) {
+    row = c;
+    try { localStorage.setItem('cc', c[0]); } catch { /* private mode */ }
+    paint();
+    close();
+    num.focus();
+  }
+
+  function open() {
+    pop.classList.add('on');
+    search.value = '';
+    fill('');
+    setTimeout(() => search.focus(), 40);
+  }
+  function close() { pop.classList.remove('on'); }
+
+  btn.onclick = (e) => { e.stopPropagation(); pop.classList.contains('on') ? close() : open(); };
+  document.addEventListener('click', (e) => { if (!cc.contains(e.target)) close(); });
+
+  search.oninput = () => fill(search.value);
+  search.onkeydown = (e) => {
+    const items = [...list.querySelectorAll('button')];
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!items.length) return;
+      items[cursor]?.classList.remove('active');
+      cursor = (cursor + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      items[cursor].classList.add('active');
+      items[cursor].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (shown[cursor]) choose(shown[cursor]);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+      btn.focus();
+    }
+  };
+
+  cc.append(btn, pop);
+
+  const num = el('input');
+  num.inputMode = 'tel';
+  num.autocomplete = 'tel-national';
+  num.placeholder = '24 123 4567';
+  num.setAttribute('aria-label', 'Phone number without the country code');
+  num.onkeydown = (e) => { if (e.key === 'Enter' && onSubmit) onSubmit(); };
+
+  wrap.append(cc, num);
+
+  return {
+    el: wrap,
+    focus: () => num.focus(),
+    // Digits only, country code first. That is what both networks want.
+    value: () => {
+      const local = num.value.replace(/[^0-9]/g, '').replace(/^0+/, '');
+      return local ? row[2] + local : '';
+    },
+  };
 }

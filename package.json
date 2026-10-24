@@ -9,7 +9,9 @@
     "serve": "node server/index.js",
     "dev": "node --watch server/index.js",
     "dist": "electron-builder",
-    "dist:linux": "electron-builder --linux AppImage deb"
+    "dist:linux": "electron-builder --linux AppImage deb",
+    "shots": "electron scripts/screenshots.cjs",
+    "dist:all": "electron-builder --linux --win --mac"
   },
   "engines": {
     "node": ">=20"
@@ -44,21 +46,38 @@
     "linux": {
       "target": [
         "AppImage",
-        "deb"
+        "deb",
+        "rpm"
       ],
       "category": "Network;InstantMessaging",
       "maintainer": "maykano"
     },
     "win": {
       "target": [
-        "nsis"
-      ]
+        "nsis",
+        "portable"
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "mac": {
       "target": [
-        "dmg"
+        "dmg",
+        "zip"
       ],
-      "category": "public.app-category.social-networking"
-    }
-  }
+      "category": "public.app-category.social-networking",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "maykano-dev",
+        "repo": "Parley"
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maykano-dev/Parley.git"
+  },
+  "license": "MIT"
 }
