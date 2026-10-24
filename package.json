@@ -17,7 +17,9 @@
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.24",
     "pino": "^10.4.0",
+    "prebuilt-tdlib": "^0.1008069.0",
     "qrcode": "^1.5.4",
+    "tdl": "^8.1.0",
     "ws": "^8.22.0"
   },
   "devDependencies": {
