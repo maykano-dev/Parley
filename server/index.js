@@ -313,6 +313,7 @@ tg.on('chat', (chat) => broadcast('chat', { chat }));
 tg.on('message', (message) => broadcast('message', { message }));
 tg.on('presence', (p) => broadcast('presence', p));
 tg.on('error', (message) => broadcast('error', { message }));
+tg.on('authError', (message) => broadcast('tgAuthError', { message }));
 
 wa.on('qr', async (qr) => {
   try {

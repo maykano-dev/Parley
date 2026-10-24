@@ -70,7 +70,7 @@ export class Telegram extends EventEmitter {
 
   isLinked() {
     try {
-      return fs.existsSync(path.join(DB, 'td.binlog'));
+      return fs.existsSync(path.join(DB, 'db.sqlite')) || fs.existsSync(path.join(DB, 'td.binlog'));
     } catch {
       return false;
     }
@@ -194,11 +194,21 @@ export class Telegram extends EventEmitter {
   }
 
   async submitCode(code) {
-    await this.client.invoke({ _: 'checkAuthenticationCode', code: String(code).trim() });
+    try {
+      await this.client.invoke({ _: 'checkAuthenticationCode', code: String(code).trim() });
+    } catch (e) {
+      this.emit('authError', friendly(e));
+      throw new Error(friendly(e));
+    }
   }
 
   async submitPassword(password) {
-    await this.client.invoke({ _: 'checkAuthenticationPassword', password: String(password) });
+    try {
+      await this.client.invoke({ _: 'checkAuthenticationPassword', password: String(password) });
+    } catch (e) {
+      this.emit('authError', friendly(e));
+      throw new Error(friendly(e));
+    }
   }
 
   async logout() {
@@ -404,6 +414,20 @@ export class Telegram extends EventEmitter {
 }
 
 // ---- helpers ----------------------------------------------------
+
+// TDLib error strings are shouty constants. Say something a person can act on.
+function friendly(e) {
+  const m = String(e?.message || e);
+  if (/PASSWORD_HASH_INVALID|PASSWORD_INVALID/i.test(m)) return 'That password was not accepted. Check it and try again.';
+  if (/PHONE_CODE_INVALID/i.test(m)) return 'That login code is not right.';
+  if (/PHONE_CODE_EXPIRED/i.test(m)) return 'That code expired. Start over to get a new one.';
+  if (/FLOOD_WAIT_(\d+)/i.test(m)) {
+    const s = /FLOOD_WAIT_(\d+)/i.exec(m)[1];
+    return 'Telegram is rate limiting this. Wait about ' + Math.ceil(Number(s) / 60) + ' minutes.';
+  }
+  if (/PHONE_NUMBER_INVALID/i.test(m)) return 'Telegram does not recognise that number.';
+  return m;
+}
 
 function toMs(sec) { return (Number(sec) || 0) * 1000; }
 

@@ -224,11 +224,28 @@ function handle(m) {
       break;
     case 'results': S.results = m.results || []; S.view = 'results'; renderChats(); break;
     case 'tgStatus': {
+      const wasConnecting = S.tg.status;
       S.tg = Object.assign({}, S.tg, m);
       NETWORKS.telegram.live = S.tg.status === 'online';
       renderRail();
-      if (['needPhone', 'needCode', 'needPassword'].includes(m.status) && $('#overlay').classList.contains('on')) openTelegram();
-      if (m.status === 'online') banner('Telegram connected', 'ok', 2500);
+      renderAccounts();
+      const sheetOpen = $('#overlay').classList.contains('on');
+
+      if (m.status === 'online') {
+        // Terminal state. Close the form and get out of the way.
+        if (sheetOpen) $('#overlay').classList.remove('on');
+        if (document.body.classList.contains('in-accounts')) showView(null);
+        banner('Telegram connected', 'ok', 2600);
+        sendWS({ t: 'vault' });
+      } else if (['needPhone', 'needCode', 'needPassword'].includes(m.status) && sheetOpen) {
+        openTelegram();
+      } else if (m.status === 'connecting' && sheetOpen && wasConnecting !== 'connecting') {
+        tgBusy('Signing you in');
+      }
+      break;
+    }
+    case 'tgAuthError': {
+      tgFail(m.message);
       break;
     }
     case 'vault': V.items = m.items || []; V.stats = m.stats; V.loaded = true; renderVault(); break;
@@ -1640,6 +1657,20 @@ function bytes(n) {
 
 function tgLive() { return S.tg.status === 'online'; }
 
+// The connect form owns these so a failure can put the button back rather
+// than leaving it stuck mid-action.
+let tgBtn = null;
+let tgErr = null;
+function tgBusy(label) {
+  if (tgBtn) { tgBtn.disabled = true; tgBtn.textContent = label; }
+  if (tgErr) tgErr.style.display = 'none';
+}
+function tgFail(message) {
+  if (tgBtn) { tgBtn.disabled = false; tgBtn.textContent = tgBtn.dataset.cta || 'Try again'; }
+  if (tgErr) { tgErr.textContent = message; tgErr.style.display = 'block'; }
+  else banner(message, 'bad', 7000);
+}
+
 function openTelegram() {
   const st = S.tg;
 
@@ -1768,16 +1799,24 @@ function openTelegram() {
     field.appendChild(el('div', 'help', cfg.help));
     host.appendChild(field);
 
+    const err = el('div');
+    err.style.cssText = 'display:none;margin-top:12px;padding:11px 13px;border-radius:12px;background:rgba(255,69,58,.1);border:1px solid rgba(255,69,58,.3);color:#FF8A80;font-size:12.5px;line-height:1.5';
+    host.appendChild(err);
+
     const go = el('button', 'btn primary btn-lg', cfg.cta);
+    go.dataset.cta = cfg.cta;
     function submit() {
       const v = read();
       if (!v) { focusIt(); return; }
       go.disabled = true;
       go.textContent = 'Working';
+      err.style.display = 'none';
       cfg.send(v);
     }
     go.onclick = submit;
     host.appendChild(go);
+    tgBtn = go;
+    tgErr = err;
 
     if (step !== 'needPhone' && step !== 'offline') {
       const row = el('div', 'link-row');
